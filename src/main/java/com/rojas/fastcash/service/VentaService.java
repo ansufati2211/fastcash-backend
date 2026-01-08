@@ -2,6 +2,7 @@ package com.rojas.fastcash.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rojas.fastcash.dto.RegistroVentaRequest;
+import com.rojas.fastcash.dto.AnulacionRequest; // Importamos el DTO nuevo
 import com.rojas.fastcash.entity.SesionCaja;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -13,11 +14,12 @@ import java.util.Map;
 @Service
 public class VentaService {
 
-@Autowired private JdbcTemplate jdbcTemplate;
+    @Autowired private JdbcTemplate jdbcTemplate;
     @Autowired private CajaService cajaService;
     
-    // SOLUCIÓN: Lo instanciamos manualmente
+    // Instancia manual de Jackson para convertir objetos a JSON
     private final ObjectMapper objectMapper = new ObjectMapper();
+
     @Transactional
     public Map<String, Object> registrarVenta(RegistroVentaRequest request) {
         
@@ -29,7 +31,6 @@ public class VentaService {
 
         try {
             // 2. Convertir las listas de Java a texto JSON para SQL Server
-            // SQL Server espera: '[{"CategoriaID":1, "Monto":10.00}]'
             String jsonDetalles = objectMapper.writeValueAsString(request.getDetalles());
             String jsonPagos = objectMapper.writeValueAsString(request.getPagos());
 
@@ -42,7 +43,7 @@ public class VentaService {
                          "@JsonDetalles = ?, " +
                          "@JsonPagos = ?";
 
-            // 4. Ejecutar y capturar la respuesta (El SP devuelve el ID de venta y Número de Ticket)
+            // 4. Ejecutar y capturar la respuesta
             Map<String, Object> resultado = jdbcTemplate.queryForMap(sql,
                     request.getUsuarioID(),
                     request.getTipoComprobanteID(),
@@ -60,8 +61,34 @@ public class VentaService {
             return resultado;
 
         } catch (Exception e) {
-            // Error técnico o de validación SQL
             throw new RuntimeException("Error al procesar la venta: " + e.getMessage());
+        }
+    }
+
+    // ==========================================
+    // NUEVO MÉTODO: MÓDULO 6 (ANULACIONES)
+    // ==========================================
+    @Transactional
+    public Map<String, Object> anularVenta(AnulacionRequest request) {
+        // 1. Validar que el usuario tenga caja abierta (Recomendado para auditoría)
+        SesionCaja sesion = cajaService.obtenerSesionActual(request.getUsuarioID());
+        if (sesion == null) {
+            throw new RuntimeException("No puede realizar anulaciones sin una caja abierta.");
+        }
+
+        try {
+            // Llamamos al SP de anulación lógica
+            String sql = "EXEC sp_Operacion_AnularVenta @VentaID = ?, @UsuarioID = ?, @Motivo = ?";
+            
+            return jdbcTemplate.queryForMap(sql, 
+                request.getVentaID(), 
+                request.getUsuarioID(), 
+                request.getMotivo()
+            );
+
+        } catch (Exception e) {
+            // Capturamos errores como "La venta no existe" o "Ya está anulada"
+            throw new RuntimeException("Error al anular la venta: " + e.getMessage());
         }
     }
 }
