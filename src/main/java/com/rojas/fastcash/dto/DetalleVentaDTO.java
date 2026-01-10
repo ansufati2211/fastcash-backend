@@ -6,8 +6,8 @@ import java.math.BigDecimal;
 
 @Data
 public class DetalleVentaDTO {
-    // Usamos mayúscula inicial porque SQL Server espera JSON con claves en mayúscula
-    @JsonProperty("CategoriaID") 
+
+    @JsonProperty("CategoriaID")
     private Integer categoriaID;
 
     @JsonProperty("Monto")

@@ -3,7 +3,7 @@ import lombok.Data;
 import java.math.BigDecimal;
 
 @Data
-public class AperturaCajaRequest {
+public class CierreCajaRequest {
     private Integer usuarioID;
-    private BigDecimal saldoInicial; // Puede venir nulo
+    private BigDecimal saldoFinalReal;
 }

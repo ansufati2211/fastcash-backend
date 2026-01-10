@@ -1,6 +1,7 @@
 package com.rojas.fastcash.controller;
 
 import com.rojas.fastcash.dto.AperturaCajaRequest;
+import com.rojas.fastcash.dto.CierreCajaRequest;
 import com.rojas.fastcash.entity.SesionCaja;
 import com.rojas.fastcash.service.CajaService;
 import jakarta.validation.Valid;
@@ -34,6 +35,17 @@ public class CajaController {
             cajaService.abrirCaja(request);
             return ResponseEntity.ok(Map.of("mensaje", "Caja abierta exitosamente"));
         } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // Agrega este endpoint
+    @PostMapping("/cerrar")
+    public ResponseEntity<?> cerrarCaja(@RequestBody CierreCajaRequest request) {
+        try {
+            Map<String, Object> resultado = cajaService.cerrarCaja(request);
+            return ResponseEntity.ok(resultado);
+        } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
