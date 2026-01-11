@@ -1,17 +1,15 @@
 package com.rojas.fastcash.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.rojas.fastcash.dto.RegistroVentaRequest;
 import com.rojas.fastcash.dto.AnulacionRequest;
 import com.rojas.fastcash.dto.PagoVentaDTO;
+import com.rojas.fastcash.dto.RegistroVentaRequest;
 import com.rojas.fastcash.entity.SesionCaja;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 
@@ -23,35 +21,35 @@ public class VentaService {
     
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    // ==========================================
+    // 1. REGISTRAR VENTA (Con Fecha y Ticket Manual)
+    // ==========================================
     @Transactional
     public Map<String, Object> registrarVenta(RegistroVentaRequest request) {
         
-        // 1. REGLA: Caja Abierta
+        // Validar Caja Abierta
         SesionCaja sesion = cajaService.obtenerSesionActual(request.getUsuarioID());
         if (sesion == null) {
-            throw new RuntimeException("CAJA CERRADA: El usuario debe abrir caja antes de vender.");
+            throw new RuntimeException("CAJA CERRADA: Debe abrir caja antes de vender.");
         }
 
-        // 2. REGLA: Auditoría de Pagos
+        // Validar Pagos Digitales (Yape/Tarjeta requieren código)
         if (request.getPagos() != null) {
             for (PagoVentaDTO pago : request.getPagos()) {
                 if (!"EFECTIVO".equals(pago.getFormaPago())) {
                     if (pago.getNumOperacion() == null || pago.getNumOperacion().trim().isEmpty()) {
-                        throw new RuntimeException("ERROR: Debe ingresar el N° de Operación para pagos con " + pago.getFormaPago());
+                        throw new RuntimeException("ERROR: Debe ingresar el N° de Operación para " + pago.getFormaPago());
                     }
                 }
             }
         }
 
         try {
-            // 3. Serializar a JSON
+            // Preparar JSONs para SQL
             String jsonDetalles = objectMapper.writeValueAsString(request.getDetalles());
             String jsonPagos = objectMapper.writeValueAsString(request.getPagos());
 
-            // CORRECCIÓN DE HORA: America/Lima
-            LocalDateTime fechaPeru = LocalDateTime.now(ZoneId.of("America/Lima"));
-
-            // 4. Llamar al SP
+            // Llamar al SP (8 Parámetros)
             String sql = "EXEC sp_RegistrarVentaTransaccional " +
                          "@UsuarioID = ?, " +
                          "@TipoComprobanteID = ?, " +
@@ -59,9 +57,9 @@ public class VentaService {
                          "@ClienteNombre = ?, " +
                          "@JsonDetalles = ?, " +
                          "@JsonPagos = ?, " +
-                         "@FechaPersonalizada = ?";
+                         "@FechaPersonalizada = ?, " + 
+                         "@NumeroComprobanteManual = ?";
 
-            // 5. Ejecutar
             Map<String, Object> resultado = jdbcTemplate.queryForMap(sql,
                     request.getUsuarioID(),
                     request.getTipoComprobanteID(),
@@ -69,7 +67,8 @@ public class VentaService {
                     request.getClienteNombre(),
                     jsonDetalles,
                     jsonPagos,
-                    fechaPeru 
+                    request.getFechaEmision(),           // Fecha manual (o null)
+                    request.getNumeroComprobanteManual() // Ticket manual (o null)
             );
 
             if ("ERROR".equals(resultado.get("Status"))) {
@@ -80,59 +79,43 @@ public class VentaService {
 
         } catch (Exception e) {
             String errorMsg = e.getCause() != null ? e.getCause().getMessage() : e.getMessage();
-            throw new RuntimeException("Error al procesar venta: " + errorMsg);
+            throw new RuntimeException("Error venta: " + errorMsg);
         }
     }
 
+    // ==========================================
+    // 2. ANULAR VENTA
+    // ==========================================
     @Transactional
     public Map<String, Object> anularVenta(AnulacionRequest request) {
         SesionCaja sesion = cajaService.obtenerSesionActual(request.getUsuarioID());
         if (sesion == null) {
-            throw new RuntimeException("No puede realizar anulaciones sin una caja abierta.");
+            throw new RuntimeException("No puede anular sin caja abierta.");
         }
-
         try {
             String sql = "EXEC sp_Operacion_AnularVenta @VentaID = ?, @UsuarioID = ?, @Motivo = ?";
             return jdbcTemplate.queryForMap(sql, request.getVentaID(), request.getUsuarioID(), request.getMotivo());
         } catch (Exception e) {
             String errorMsg = e.getCause() != null ? e.getCause().getMessage() : e.getMessage();
-            throw new RuntimeException("Error al anular: " + errorMsg);
+            throw new RuntimeException("Error anulación: " + errorMsg);
         }
     }
 
     // ==========================================
-    // MÉTODO: LISTAR HISTORIAL (CAPACIDAD 70)
+    // 3. LISTAR HISTORIAL DEL DÍA (MÉTODO FALTANTE)
     // ==========================================
     public List<Map<String, Object>> listarHistorialDia(Integer usuarioID) {
-        // CAMBIO AQUÍ: Se cambió TOP 50 por TOP 70
-        String sql = """
-            SELECT TOP 70 
-                v.VentaID,
-                tc.Nombre AS TipoComprobante,
-                (v.SerieComprobante + '-' + v.NumeroComprobante) AS RefOperacion,
-                v.ImporteTotal,
-                v.FechaEmision,
-                v.Estado,
-                p.FormaPago,
-                p.NumeroOperacion AS CodigoPago,
-                p.EntidadFinancieraID,
-                (SELECT TOP 1 cv.Nombre 
-                 FROM VentaDetalle vd 
-                 INNER JOIN CategoriasVenta cv ON vd.CategoriaID = cv.CategoriaID 
-                 WHERE vd.VentaID = v.VentaID) AS Familia
-            FROM Ventas v
-            INNER JOIN TiposComprobante tc ON v.TipoComprobanteID = tc.TipoID
-            INNER JOIN PagosRegistrados p ON v.VentaID = p.VentaID
-            WHERE v.UsuarioID = ? 
-            -- SIN FILTRO DE FECHA PARA TUS PRUEBAS (En producción descomentas la línea de abajo)
-            -- AND CAST(v.FechaEmision AS DATE) = CAST(GETDATE() AS DATE)
-            ORDER BY v.FechaEmision DESC
-        """;
-
-        try {
-            return jdbcTemplate.queryForList(sql, usuarioID);
-        } catch (Exception e) {
-            throw new RuntimeException("Error al cargar historial: " + e.getMessage());
-        }
+        // Consulta simple para llenar la tablita de ventas recientes del cajero
+        String sql = "SELECT VentaID, " +
+                     "CONCAT(SerieComprobante, '-', NumeroComprobante) AS Comprobante, " +
+                     "ImporteTotal, " +
+                     "FORMAT(FechaEmision, 'HH:mm') AS Hora, " +
+                     "Estado " +
+                     "FROM Ventas " +
+                     "WHERE UsuarioID = ? " +
+                     "AND CAST(FechaEmision AS DATE) = CAST(GETDATE() AS DATE) " + // Solo ventas de hoy
+                     "ORDER BY VentaID DESC"; // Las más recientes primero
+                     
+        return jdbcTemplate.queryForList(sql, usuarioID);
     }
 }

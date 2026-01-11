@@ -9,7 +9,10 @@ public class RegistroVentaRequest {
     private Integer tipoComprobanteID;
     private String clienteDoc;
     private String clienteNombre;
-    private LocalDateTime fechaEmision; // <--- NUEVO
+    
+    private LocalDateTime fechaEmision; // Fecha Manual
+    private String numeroComprobanteManual; // <--- EL NUEVO CAMPO (Opcional)
+    
     private List<DetalleVentaDTO> detalles;
     private List<PagoVentaDTO> pagos;
 }
