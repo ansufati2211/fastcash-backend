@@ -1,6 +1,5 @@
 package com.rojas.fastcash.dto;
 import lombok.Data;
-import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
@@ -10,10 +9,7 @@ public class RegistroVentaRequest {
     private String clienteDoc;
     private String clienteNombre;
     
-    // --- CAMPOS NUEVOS ---
-    private LocalDateTime fechaEmision;          // Opcional
-    private String numeroComprobanteManual;      // Opcional
-    // ---------------------
+    // SE ELIMINARON FECHA Y TICKET MANUAL
 
     private List<DetalleVentaDTO> detalles;
     private List<PagoVentaDTO> pagos;
