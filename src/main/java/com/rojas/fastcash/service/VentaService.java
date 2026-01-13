@@ -26,7 +26,7 @@ public class VentaService {
         SesionCaja sesion = cajaService.obtenerSesionActual(request.getUsuarioID());
         if (sesion == null) throw new RuntimeException("CAJA CERRADA: Debe abrir caja antes de vender.");
 
-        // 2. Validar Yape/Tarjeta (Esto sí es útil)
+        // 2. Validar Yape/Tarjeta
         if (request.getPagos() != null) {
             for (PagoVentaDTO pago : request.getPagos()) {
                 if (!"EFECTIVO".equals(pago.getFormaPago())) {
@@ -38,7 +38,7 @@ public class VentaService {
         }
 
         try {
-            // 3. Ejecutar SP (Solo 6 parámetros, lo esencial)
+            // 3. Ejecutar SP
             String sql = "EXEC sp_RegistrarVentaTransaccional @UsuarioID=?, @TipoComprobanteID=?, @ClienteDoc=?, @ClienteNombre=?, @JsonDetalles=?, @JsonPagos=?";
             
             return jdbcTemplate.queryForMap(sql,
@@ -56,12 +56,34 @@ public class VentaService {
         }
     }
 
-    // LISTAR HISTORIAL (Mantuvimos la mejora visual de fecha completa)
+    // =========================================================================
+    // LISTAR HISTORIAL (MODIFICADO: FILTRO FECHA + CATEGORÍAS REALES)
+    // =========================================================================
     public List<Map<String, Object>> listarHistorialDia(Integer usuarioID) {
-        String sql = "SELECT TOP 50 v.VentaID, CONCAT(v.SerieComprobante, '-', v.NumeroComprobante) as Comprobante, " +
-                     "v.ImporteTotal, v.FechaEmision, v.Estado, p.FormaPago, p.NumeroOperacion as RefOperacion " +
-                     "FROM Ventas v LEFT JOIN PagosRegistrados p ON v.VentaID = p.VentaID " +
-                     "WHERE v.UsuarioID = ? ORDER BY v.VentaID DESC";
+        String sql = """
+            SELECT TOP 50 
+                v.VentaID, 
+                CONCAT(v.SerieComprobante, '-', v.NumeroComprobante) as Comprobante,
+                v.ImporteTotal, 
+                v.FechaEmision, 
+                v.Estado, 
+                p.FormaPago, 
+                p.NumeroOperacion as RefOperacion,
+                
+                -- Subconsulta para traer 'Bebidas, Licores' en vez de 'Varios'
+                (SELECT STRING_AGG(cat.Nombre, ', ') 
+                 FROM VentaDetalle vd 
+                 INNER JOIN CategoriasVenta cat ON vd.CategoriaID = cat.CategoriaID 
+                 WHERE vd.VentaID = v.VentaID) as Familia
+                 
+            FROM Ventas v 
+            LEFT JOIN PagosRegistrados p ON v.VentaID = p.VentaID 
+            WHERE v.UsuarioID = ? 
+              -- Filtro para ver SOLO las ventas de HOY
+              AND CAST(v.FechaEmision AS DATE) = CAST(GETDATE() AS DATE) 
+            ORDER BY v.VentaID DESC
+        """;
+        
         return jdbcTemplate.queryForList(sql, usuarioID);
     }
 

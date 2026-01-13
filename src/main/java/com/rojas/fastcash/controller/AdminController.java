@@ -1,5 +1,6 @@
 package com.rojas.fastcash.controller;
 
+import com.rojas.fastcash.dto.ActualizarUsuarioRequest;
 import com.rojas.fastcash.dto.AsignarTurnoRequest;
 import com.rojas.fastcash.dto.CrearUsuarioRequest;
 import com.rojas.fastcash.service.AdminService;
@@ -8,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -23,7 +25,6 @@ public class AdminController {
             Map<String, Object> resultado = adminService.crearUsuario(request);
             return ResponseEntity.ok(resultado);
         } catch (Exception e) {
-            // Devuelve error si el usuario ya existe o si quien pide no es admin
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
@@ -35,6 +36,38 @@ public class AdminController {
             return ResponseEntity.ok(resultado);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/usuarios")
+    public ResponseEntity<?> listarUsuarios() {
+        try {
+            List<Map<String, Object>> usuarios = adminService.listarTodosLosUsuarios();
+            return ResponseEntity.ok(usuarios);
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // ACTUALIZAR (PUT)
+    @PutMapping("/actualizar")
+    public ResponseEntity<?> actualizarUsuario(@RequestBody ActualizarUsuarioRequest request) {
+        try {
+            adminService.actualizarUsuario(request);
+            return ResponseEntity.ok(Map.of("mensaje", "Usuario actualizado correctamente"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // ELIMINAR (DELETE)
+    @DeleteMapping("/eliminar/{id}")
+    public ResponseEntity<?> eliminarUsuario(@PathVariable Integer id) {
+        try {
+            adminService.eliminarUsuario(id);
+            return ResponseEntity.ok(Map.of("mensaje", "Usuario desactivado correctamente"));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
         }
     }
 }
