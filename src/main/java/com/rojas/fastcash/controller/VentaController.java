@@ -53,4 +53,5 @@ public class VentaController {
             return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
         }
     }
+    
 }

@@ -3,67 +3,94 @@ package com.rojas.fastcash.service;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
-import java.math.BigDecimal;
-import java.util.List;
-import java.util.Map;
+import java.time.LocalDate;
+import java.util.*;
 
 @Service
 public class ReporteService {
 
     @Autowired private JdbcTemplate jdbcTemplate;
 
-    public Map<String, Object> obtenerCierreActual(Integer usuarioID) {
-        // 1. Buscamos la sesión ABIERTA para saber a qué hora empezó
-        String sqlSesion = "SELECT TOP 1 SesionID, SaldoInicial, FechaInicio FROM SesionesCaja WHERE UsuarioID = ? AND Estado = 'ABIERTO'";
-        List<Map<String, Object>> sesiones = jdbcTemplate.queryForList(sqlSesion, usuarioID);
+    // 1. REPORTE GENERAL DE VENTAS (Con filtros dinámicos)
+    public List<Map<String, Object>> obtenerReporteVentas(String inicio, String fin, Integer usuarioID) {
+        if (inicio == null || inicio.isEmpty()) inicio = LocalDate.now().toString();
+        if (fin == null || fin.isEmpty()) fin = LocalDate.now().toString();
 
-        if (sesiones.isEmpty()) {
-            // Si no hay caja abierta, devolvemos todo en cero
-            return Map.of(
-                "Estado", "CERRADO", 
-                "Mensaje", "No hay caja abierta",
-                "VentasDigital", BigDecimal.ZERO,
-                "VentasTarjeta", BigDecimal.ZERO,
-                "TotalVendido", BigDecimal.ZERO,
-                "SaldoEsperadoEnCaja", BigDecimal.ZERO
-            );
+        StringBuilder sql = new StringBuilder();
+        sql.append("SELECT v.VentaID, u.NombreCompleto as Cajero, ")
+           .append("CONCAT(v.SerieComprobante, '-', v.NumeroComprobante) as Ticket, ")
+           .append("tc.Nombre as TipoDoc, ")
+           .append("v.ImporteTotal, FORMAT(v.FechaEmision, 'dd/MM/yyyy HH:mm') as Fecha, v.Estado ")
+           .append("FROM Ventas v ")
+           .append("JOIN Usuarios u ON v.UsuarioID = u.UsuarioID ")
+           .append("JOIN TiposComprobante tc ON v.TipoComprobanteID = tc.TipoID ")
+           .append("WHERE CAST(v.FechaEmision AS DATE) BETWEEN ? AND ? ");
+        
+        List<Object> params = new ArrayList<>();
+        params.add(inicio);
+        params.add(fin);
+
+        if (usuarioID != null && usuarioID > 0) {
+            sql.append(" AND v.UsuarioID = ? ");
+            params.add(usuarioID);
         }
 
-        Map<String, Object> sesion = sesiones.get(0);
-        BigDecimal saldoInicial = (BigDecimal) sesion.get("SaldoInicial");
-        String fechaInicio = sesion.get("FechaInicio").toString();
+        sql.append(" ORDER BY v.VentaID DESC");
+        return jdbcTemplate.queryForList(sql.toString(), params.toArray());
+    }
 
-        // 2. Sumamos las ventas de ESTA sesión manualmente para asegurar precisión
-        // Filtramos por Usuario, Fecha >= Inicio Sesión y Estado PAGADO (excluye anulados)
-        String sqlVentas = """
-            SELECT 
-                SUM(CASE WHEN p.FormaPago = 'QR' THEN p.MontoPagado ELSE 0 END) AS VentasYape,
-                SUM(CASE WHEN p.FormaPago = 'TARJETA' THEN p.MontoPagado ELSE 0 END) AS VentasTarjeta,
-                SUM(CASE WHEN p.FormaPago = 'EFECTIVO' THEN p.MontoPagado ELSE 0 END) AS VentasEfectivo,
-                SUM(p.MontoPagado) AS TotalVendido
-            FROM PagosRegistrados p
-            INNER JOIN Ventas v ON p.VentaID = v.VentaID
-            WHERE v.UsuarioID = ? 
-              AND v.Estado = 'PAGADO' 
-              AND v.FechaEmision >= ? 
-        """;
+    // 2. REPORTE POR CAJAS (Sesiones)
+    public List<Map<String, Object>> obtenerReporteCajas(String inicio, String fin, Integer usuarioID) {
+        if (inicio == null || inicio.isEmpty()) inicio = LocalDate.now().toString();
+        if (fin == null || fin.isEmpty()) fin = LocalDate.now().toString();
+        
+        // Llama al SP corregido que usa 'SaldoFinal'
+        return jdbcTemplate.queryForList("EXEC sp_Reporte_PorCaja ?, ?, ?", inicio, fin, usuarioID);
+    }
 
-        Map<String, Object> totales = jdbcTemplate.queryForMap(sqlVentas, usuarioID, fechaInicio);
+    // 3. DASHBOARD DE GRÁFICOS (Limpiamos la variable sqlBase que daba error)
+    public Map<String, Object> obtenerDatosGraficos(String fecha, Integer usuarioID) {
+        if (fecha == null || fecha.isEmpty()) fecha = LocalDate.now().toString();
+        
+        Map<String, Object> resultado = new HashMap<>();
+        
+        // Preparamos parámetros
+        List<Object> params = new ArrayList<>();
+        params.add(fecha);
+        if(usuarioID != null && usuarioID > 0) params.add(usuarioID);
 
-        // Extraer valores con manejo de nulos (si no hubo ventas devuelve null, lo pasamos a 0)
-        BigDecimal vYape = totales.get("VentasYape") != null ? (BigDecimal) totales.get("VentasYape") : BigDecimal.ZERO;
-        BigDecimal vTarjeta = totales.get("VentasTarjeta") != null ? (BigDecimal) totales.get("VentasTarjeta") : BigDecimal.ZERO;
-        BigDecimal vTotal = totales.get("TotalVendido") != null ? (BigDecimal) totales.get("TotalVendido") : BigDecimal.ZERO;
+        // SQL 1: Por Categoría (Pastel)
+        String sqlCat = "SELECT c.Nombre as label, SUM(vd.Monto) as value FROM Ventas v " +
+                        "JOIN VentaDetalle vd ON v.VentaID = vd.VentaID " +
+                        "JOIN CategoriasVenta c ON vd.CategoriaID = c.CategoriaID " +
+                        "WHERE CAST(v.FechaEmision AS DATE) = ? AND v.Estado = 'PAGADO' " +
+                        (usuarioID != null && usuarioID > 0 ? "AND v.UsuarioID = ? " : "") +
+                        "GROUP BY c.Nombre";
+        
+        // SQL 2: Por Medio de Pago (Barras)
+        String sqlPago = "SELECT p.FormaPago as label, SUM(p.MontoPagado) as value FROM Ventas v " +
+                         "JOIN PagosRegistrados p ON v.VentaID = p.VentaID " +
+                         "WHERE CAST(v.FechaEmision AS DATE) = ? AND v.Estado = 'PAGADO' " +
+                         (usuarioID != null && usuarioID > 0 ? "AND v.UsuarioID = ? " : "") +
+                         "GROUP BY p.FormaPago";
 
-        // 3. Retornamos el mapa con los nombres exactos que usa el Frontend
-        return Map.of(
-            "Estado", "ABIERTO",
-            "FechaApertura", fechaInicio,
-            "SaldoInicial", saldoInicial,
-            "VentasDigital", vYape,      // YAPE / PLIN
-            "VentasTarjeta", vTarjeta,   // TARJETAS
-            "TotalVendido", vTotal,      // SUMA TOTAL
-            "SaldoEsperadoEnCaja", saldoInicial.add(vTotal) // Saldo Inicial + Ventas
-        );
+        resultado.put("categorias", jdbcTemplate.queryForList(sqlCat, params.toArray()));
+        resultado.put("pagos", jdbcTemplate.queryForList(sqlPago, params.toArray()));
+        
+        return resultado;
+    }
+    
+    // 4. CIERRE ACTUAL (Este era el método "undefined" que faltaba)
+    public Map<String, Object> obtenerCierreActual(Integer usuarioID) {
+        try {
+            // Usa el SP robusto 'sp_Operacion_ObtenerCierreActual'
+            return jdbcTemplate.queryForMap("EXEC sp_Operacion_ObtenerCierreActual ?", usuarioID);
+        } catch (Exception e) {
+            e.printStackTrace();
+            Map<String, Object> error = new HashMap<>();
+            error.put("Estado", "ERROR");
+            error.put("TotalVendido", 0);
+            return error;
+        }
     }
 }

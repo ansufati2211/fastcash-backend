@@ -5,9 +5,11 @@ public class ActualizarUsuarioRequest {
     private String nombreCompleto;
     private String username;
     private Integer rolID;
-    private String password; // Opcional
+    private String password; // Opcional (si viene vacío, no se cambia)
+    private Boolean activo;  // ¡ESTE ES EL CAMPO QUE FALTABA!
 
-    // Getters y Setters Manuales
+    // --- Getters y Setters Manuales ---
+
     public Integer getUsuarioID() {
         return usuarioID;
     }
@@ -46,5 +48,15 @@ public class ActualizarUsuarioRequest {
 
     public void setPassword(String password) {
         this.password = password;
+    }
+
+    // --- Getters y Setters para 'activo' ---
+
+    public Boolean getActivo() {
+        return activo;
+    }
+
+    public void setActivo(Boolean activo) {
+        this.activo = activo;
     }
 }

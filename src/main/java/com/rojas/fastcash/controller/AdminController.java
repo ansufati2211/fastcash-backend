@@ -19,6 +19,7 @@ public class AdminController {
 
     @Autowired private AdminService adminService;
 
+    // 1. CREAR USUARIO
     @PostMapping("/crear-usuario")
     public ResponseEntity<?> crearUsuario(@Valid @RequestBody CrearUsuarioRequest request) {
         try {
@@ -29,6 +30,7 @@ public class AdminController {
         }
     }
 
+    // 2. ASIGNAR TURNO
     @PostMapping("/asignar-turno")
     public ResponseEntity<?> asignarTurno(@Valid @RequestBody AsignarTurnoRequest request) {
         try {
@@ -39,6 +41,7 @@ public class AdminController {
         }
     }
 
+    // 3. LISTAR USUARIOS
     @GetMapping("/usuarios")
     public ResponseEntity<?> listarUsuarios() {
         try {
@@ -49,18 +52,19 @@ public class AdminController {
         }
     }
 
-    // ACTUALIZAR (PUT)
+    // 4. ACTUALIZAR USUARIO
     @PutMapping("/actualizar")
     public ResponseEntity<?> actualizarUsuario(@RequestBody ActualizarUsuarioRequest request) {
         try {
             adminService.actualizarUsuario(request);
             return ResponseEntity.ok(Map.of("mensaje", "Usuario actualizado correctamente"));
         } catch (Exception e) {
+            e.printStackTrace();
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 
-    // ELIMINAR (DELETE)
+    // 5. ELIMINAR (DESACTIVAR) USUARIO
     @DeleteMapping("/eliminar/{id}")
     public ResponseEntity<?> eliminarUsuario(@PathVariable Integer id) {
         try {
