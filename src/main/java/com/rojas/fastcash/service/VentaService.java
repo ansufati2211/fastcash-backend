@@ -57,32 +57,12 @@ public class VentaService {
     }
 
     // =========================================================================
-    // LISTAR HISTORIAL (MODIFICADO: FILTRO FECHA + CATEGORÍAS REALES)
+    // LISTAR HISTORIAL (CORREGIDO: USANDO SP PARA TRAER CAJERO Y LÓGICA ADMIN)
     // =========================================================================
     public List<Map<String, Object>> listarHistorialDia(Integer usuarioID) {
-        String sql = """
-            SELECT TOP 50 
-                v.VentaID, 
-                CONCAT(v.SerieComprobante, '-', v.NumeroComprobante) as Comprobante,
-                v.ImporteTotal, 
-                v.FechaEmision, 
-                v.Estado, 
-                p.FormaPago, 
-                p.NumeroOperacion as RefOperacion,
-                
-                -- Subconsulta para traer 'Bebidas, Licores' en vez de 'Varios'
-                (SELECT STRING_AGG(cat.Nombre, ', ') 
-                 FROM VentaDetalle vd 
-                 INNER JOIN CategoriasVenta cat ON vd.CategoriaID = cat.CategoriaID 
-                 WHERE vd.VentaID = v.VentaID) as Familia
-                 
-            FROM Ventas v 
-            LEFT JOIN PagosRegistrados p ON v.VentaID = p.VentaID 
-            WHERE v.UsuarioID = ? 
-              -- Filtro para ver SOLO las ventas de HOY
-              AND CAST(v.FechaEmision AS DATE) = CAST(GETDATE() AS DATE) 
-            ORDER BY v.VentaID DESC
-        """;
+        // CORRECCIÓN: Llamamos al SP que ya configuraste en SQL Server.
+        // Este SP devuelve la columna 'Cajero' (con el username) y filtra si es Admin o Cajero.
+        String sql = "EXEC sp_Ventas_HistorialDia ?";
         
         return jdbcTemplate.queryForList(sql, usuarioID);
     }
