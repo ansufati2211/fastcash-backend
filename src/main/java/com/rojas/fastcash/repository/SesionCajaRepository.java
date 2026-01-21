@@ -8,7 +8,8 @@ import java.util.Optional;
 
 public interface SesionCajaRepository extends JpaRepository<SesionCaja, Integer> {
     
-    // Query para saber si un usuario ya tiene la caja abierta
+    // Esta query es la clave: Solo detecta si hay una ABIERTA.
+    // Si la cajera cerró su turno hace 1 hora, esto devolverá vacío y permitirá abrir de nuevo.
     @Query("SELECT s FROM SesionCaja s WHERE s.usuario.usuarioID = :uid AND s.estado = 'ABIERTO'")
     Optional<SesionCaja> buscarSesionAbierta(@Param("uid") Integer usuarioID);
 }
