@@ -4,15 +4,17 @@ import com.rojas.fastcash.dto.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional; // Importante para seguridad
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
 
 @Service
 public class AdminService {
 
     @Autowired private JdbcTemplate jdbcTemplate;
 
-    // 1. CREAR USUARIO (Ahora devuelve Map para que el Controller no falle)
+    // 1. CREAR USUARIO
     public Map<String, Object> crearUsuario(CrearUsuarioRequest req) {
         String sql = "INSERT INTO Usuarios (NombreCompleto, Username, Pswd, RolID, Activo, FechaRegistro) VALUES (?, ?, ?, ?, 1, GETDATE())";
         
@@ -26,7 +28,7 @@ public class AdminService {
         return Map.of("mensaje", "Usuario creado correctamente", "status", "OK");
     }
 
-    // 2. ASIGNAR TURNO (Ahora devuelve Map)
+    // 2. ASIGNAR TURNO (Para asignaciones manuales directas)
     public Map<String, Object> asignarTurno(AsignarTurnoRequest req) {
         // A. Desactivar turnos anteriores
         jdbcTemplate.update("UPDATE UsuarioTurnos SET Activo=0 WHERE UsuarioID=?", req.getUsuarioID());
@@ -43,7 +45,7 @@ public class AdminService {
         return Map.of("mensaje", "Turno asignado correctamente", "status", "OK");
     }
 
-    // 3. LISTAR USUARIOS
+    // 3. LISTAR USUARIOS (Con Join para ver el Turno actual)
     public List<Map<String, Object>> listarTodosLosUsuarios() {
         String sql = """
             SELECT u.UsuarioID, u.NombreCompleto, u.Username, r.Nombre as Rol, u.Activo,
@@ -61,38 +63,51 @@ public class AdminService {
         return jdbcTemplate.queryForList(sql);
     }
 
-    // 4. ACTUALIZAR USUARIO
-    public void actualizarUsuario(ActualizarUsuarioRequest req) {
-        String pass = req.getPassword();
-        Boolean activo = req.getActivo() != null ? req.getActivo() : true; // Default true si es nulo
+    // =========================================================================
+    // 4. ACTUALIZAR USUARIO (¡AQUÍ ESTABA EL ERROR Y ESTA ES LA CORRECCIÓN!) 🚨
+    // =========================================================================
+    @Transactional
+    public Map<String, Object> actualizarUsuario(ActualizarUsuarioRequest req) {
+        
+        // Lógica de seguridad: Si activo es nulo, asumimos true para no bloquear
+        boolean estadoFinal = (req.getActivo() != null) ? req.getActivo() : true;
 
-        if (pass != null && !pass.trim().isEmpty()) {
-            // Con contraseña
-            String sql = "UPDATE Usuarios SET NombreCompleto=?, Username=?, RolID=?, Activo=?, Pswd=? WHERE UsuarioID=?";
-            jdbcTemplate.update(sql, 
-                req.getNombreCompleto(), 
-                req.getUsername(), 
-                req.getRolID(), 
-                activo, 
-                pass, 
-                req.getUsuarioID()
+        // Usamos el SP Inteligente que creamos en SQL
+        // Este SP actualiza los datos personales Y TAMBIÉN gestiona el cambio de turno si es necesario.
+        String sql = "EXEC sp_Admin_ActualizarUsuario " +
+                     "@UsuarioID = ?, " +
+                     "@Nombre = ?, " +
+                     "@Username = ?, " +
+                     "@RolID = ?, " +
+                     "@TurnoID = ?, " +   // <--- ¡CRUCIAL! Pasamos el turno
+                     "@Activo = ?, " +    // <--- ¡CRUCIAL! Pasamos el estado
+                     "@Password = ?";
+                     
+        try {
+            jdbcTemplate.update(sql,
+                req.getUsuarioID(),
+                req.getNombreCompleto(), // Usamos nombreCompleto del DTO
+                req.getUsername(),
+                req.getRolID(),
+                req.getTurnoID(),        // Enviamos el nuevo turno al SQL
+                estadoFinal,             // Enviamos el estado (true/false)
+                req.getPassword()        // Si es vacío, el SP lo ignora
             );
-        } else {
-            // Sin contraseña
-            String sql = "UPDATE Usuarios SET NombreCompleto=?, Username=?, RolID=?, Activo=? WHERE UsuarioID=?";
-            jdbcTemplate.update(sql, 
-                req.getNombreCompleto(), 
-                req.getUsername(), 
-                req.getRolID(), 
-                activo, 
-                req.getUsuarioID()
-            );
+            
+            // Retornamos un mapa de éxito
+            Map<String, Object> response = new HashMap<>();
+            response.put("mensaje", "Usuario y Turno actualizados correctamente");
+            response.put("status", "OK");
+            return response;
+
+        } catch (Exception e) {
+            // Error amigable
+            throw new RuntimeException("Error al actualizar usuario: " + e.getMessage());
         }
     }
 
-    // 5. ELIMINAR USUARIO (Este era el método "undefined")
+    // 5. ELIMINAR USUARIO (Desactivación Lógica)
     public void eliminarUsuario(Integer usuarioID) {
-        // Desactivación lógica (Soft Delete)
         String sql = "UPDATE Usuarios SET Activo = 0 WHERE UsuarioID = ?";
         jdbcTemplate.update(sql, usuarioID);
     }

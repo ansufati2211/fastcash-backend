@@ -1,14 +1,22 @@
 package com.rojas.fastcash.dto;
 
 public class ActualizarUsuarioRequest {
+
     private Integer usuarioID;
-    private String nombreCompleto;
+    private String nombreCompleto; // Coincide con tu AdminService.java
     private String username;
     private Integer rolID;
     private String password; // Opcional (si viene vacío, no se cambia)
-    private Boolean activo;  // ¡ESTE ES EL CAMPO QUE FALTABA!
+    
+    // ==========================================
+    //  CAMPOS NUEVOS Y CRÍTICOS 🚨
+    // ==========================================
+    private Integer turnoID; // ¡Necesario para asignar el turno en el SP!
+    private Boolean activo;  // ¡Necesario para no desactivar al usuario (BIT)!
 
-    // --- Getters y Setters Manuales ---
+    // ==========================================
+    //  GETTERS Y SETTERS
+    // ==========================================
 
     public Integer getUsuarioID() {
         return usuarioID;
@@ -50,7 +58,15 @@ public class ActualizarUsuarioRequest {
         this.password = password;
     }
 
-    // --- Getters y Setters para 'activo' ---
+    // --- Getters y Setters de los Nuevos Campos ---
+
+    public Integer getTurnoID() {
+        return turnoID;
+    }
+
+    public void setTurnoID(Integer turnoID) {
+        this.turnoID = turnoID;
+    }
 
     public Boolean getActivo() {
         return activo;
