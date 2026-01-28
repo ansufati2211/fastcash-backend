@@ -42,16 +42,19 @@ public class VentaController {
     }
 
     // ==========================================
-    // NUEVO ENDPOINT: HISTORIAL
+    // ENDPOINT: HISTORIAL (MEJORADO CON FILTRO)
     // ==========================================
     @GetMapping("/historial/{usuarioID}")
-    public ResponseEntity<?> obtenerHistorial(@PathVariable Integer usuarioID) {
+    public ResponseEntity<?> obtenerHistorial(
+            @PathVariable Integer usuarioID,
+            @RequestParam(value = "filtro", required = false) Integer filtroUsuarioID // <--- NUEVO PARÁMETRO
+    ) {
         try {
-            List<Map<String, Object>> historial = ventaService.listarHistorialDia(usuarioID);
+            // Pasamos el filtro al servicio (si es null, no pasa nada)
+            List<Map<String, Object>> historial = ventaService.listarHistorialDia(usuarioID, filtroUsuarioID);
             return ResponseEntity.ok(historial);
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
         }
     }
-    
 }

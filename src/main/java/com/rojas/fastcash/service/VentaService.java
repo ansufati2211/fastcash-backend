@@ -57,14 +57,14 @@ public class VentaService {
     }
 
     // =========================================================================
-    // LISTAR HISTORIAL (CORREGIDO: USANDO SP PARA TRAER CAJERO Y LÓGICA ADMIN)
+    // LISTAR HISTORIAL (MEJORADO CON FILTRO)
     // =========================================================================
-    public List<Map<String, Object>> listarHistorialDia(Integer usuarioID) {
-        // CORRECCIÓN: Llamamos al SP que ya configuraste en SQL Server.
-        // Este SP devuelve la columna 'Cajero' (con el username) y filtra si es Admin o Cajero.
-        String sql = "EXEC sp_Ventas_HistorialDia ?";
+    public List<Map<String, Object>> listarHistorialDia(Integer usuarioID, Integer filtroUsuarioID) {
         
-        return jdbcTemplate.queryForList(sql, usuarioID);
+        // USAMOS EL NUEVO SP QUE ACEPTA EL FILTRO OPCIONAL
+        String sql = "EXEC sp_HistorialVentas_Filtrado ?, ?";
+        
+        return jdbcTemplate.queryForList(sql, usuarioID, filtroUsuarioID);
     }
 
     @Transactional

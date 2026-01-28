@@ -13,20 +13,25 @@ public class AuthRepository {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    // Método para Login
     public Map<String, Object> ejecutarSpLogin(String username, String password) {
-        // Llamada al SP definido en SQL Server
-        // Se asume que en BD la columna Pswd tiene el texto plano (ej: "123456")
         String sql = "EXEC sp_Auth_Login @Username = ?, @PasswordHash = ?";
-        
-        // Ejecutamos la consulta
         List<Map<String, Object>> resultados = jdbcTemplate.queryForList(sql, username, password);
-
-        // Si no hay resultados, las credenciales no coincidieron
         if (resultados.isEmpty()) {
             return null;
         }
-        
-        // Retornamos el primer registro encontrado
         return resultados.get(0);
+    }
+
+    // =========================================================================
+    //  NUEVO MÉTODO: ACTUALIZAR USUARIO (Incluye TurnoID)
+    // =========================================================================
+    public void actualizarUsuario(Integer id, String nombre, String username, Integer rolId, Integer turnoId, Boolean activo, String password) {
+        // Orden exacto de los parámetros en tu SP SQL:
+        // @UsuarioID, @Nombre, @Username, @RolID, @TurnoID, @Activo, @Password
+        String sql = "EXEC sp_Admin_ActualizarUsuario ?, ?, ?, ?, ?, ?, ?";
+        
+        // Ejecutamos la actualización
+        jdbcTemplate.update(sql, id, nombre, username, rolId, turnoId, activo, password);
     }
 }
