@@ -38,8 +38,10 @@ public class VentaService {
         }
 
         try {
-            // 3. Ejecutar SP
-            String sql = "EXEC sp_RegistrarVentaTransaccional @UsuarioID=?, @TipoComprobanteID=?, @ClienteDoc=?, @ClienteNombre=?, @JsonDetalles=?, @JsonPagos=?";
+            // 3. Ejecutar SP (ACTUALIZADO)
+            // Nota: Cambié el nombre a 'sp_Ventas_Registrar' para coincidir con el script SQL
+            // y agregué el parámetro @ComprobanteExterno al final.
+            String sql = "EXEC sp_Ventas_Registrar @UsuarioID=?, @TipoComprobanteID=?, @ClienteDoc=?, @ClienteNombre=?, @JsonDetalles=?, @JsonPagos=?, @ComprobanteExterno=?";
             
             return jdbcTemplate.queryForMap(sql,
                     request.getUsuarioID(),
@@ -47,7 +49,8 @@ public class VentaService {
                     request.getClienteDoc(),
                     request.getClienteNombre(),
                     objectMapper.writeValueAsString(request.getDetalles()),
-                    objectMapper.writeValueAsString(request.getPagos())
+                    objectMapper.writeValueAsString(request.getPagos()),
+                    request.getComprobanteExterno() // <--- AQUÍ PASAMOS EL DATO NUEVO
             );
 
         } catch (Exception e) {
@@ -57,13 +60,12 @@ public class VentaService {
     }
 
     // =========================================================================
-    // LISTAR HISTORIAL (MEJORADO CON FILTRO)
+    // LISTAR HISTORIAL
     // =========================================================================
     public List<Map<String, Object>> listarHistorialDia(Integer usuarioID, Integer filtroUsuarioID) {
-        
-        // USAMOS EL NUEVO SP QUE ACEPTA EL FILTRO OPCIONAL
+        // Asegúrate de que este SP (sp_HistorialVentas_Filtrado) 
+        // tenga la lógica del CASE que te pasé para ver el Código Externo.
         String sql = "EXEC sp_HistorialVentas_Filtrado ?, ?";
-        
         return jdbcTemplate.queryForList(sql, usuarioID, filtroUsuarioID);
     }
 

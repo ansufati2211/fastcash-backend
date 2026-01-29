@@ -8,8 +8,11 @@ public class RegistroVentaRequest {
     private Integer tipoComprobanteID;
     private String clienteDoc;
     private String clienteNombre;
-    
-    // SE ELIMINARON FECHA Y TICKET MANUAL
+
+    // --- NUEVO CAMPO (OPCIONAL) ---
+    // Si el front no lo envía, llega como null y no pasa nada.
+    private String comprobanteExterno; 
+    // ------------------------------
 
     private List<DetalleVentaDTO> detalles;
     private List<PagoVentaDTO> pagos;
