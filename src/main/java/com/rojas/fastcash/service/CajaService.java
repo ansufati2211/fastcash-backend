@@ -8,9 +8,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.scheduling.annotation.Scheduled; // <--- IMPORTANTE PARA EL CRON
+
 import java.math.BigDecimal;
 import java.util.Map;
-import java.util.Optional; // Importación necesaria
+import java.util.Optional;
 
 @Service
 public class CajaService {
@@ -26,7 +28,7 @@ public class CajaService {
     public void abrirCaja(AperturaCajaRequest request) {
         
         // =================================================================================
-        // 1. VALIDACIÓN DE SEGURIDAD (LO QUE FALTABA)
+        // 1. VALIDACIÓN DE SEGURIDAD
         // =================================================================================
         // Antes de llamar a la BD, verificamos en Java si ya tiene una sesión activa.
         Optional<SesionCaja> sesionActual = sesionRepo.buscarSesionAbierta(request.getUsuarioID());
@@ -65,6 +67,25 @@ public class CajaService {
             return jdbcTemplate.queryForMap(sql, request.getUsuarioID(), request.getSaldoFinalReal());
         } catch (Exception e) {
             throw new RuntimeException("Error al cerrar caja: " + e.getMessage());
+        }
+    }
+
+    // =========================================================================
+    // TAREA AUTOMÁTICA: CIERRE DE CAJA DE EMERGENCIA (00:00 AM)
+    // =========================================================================
+    // Se ejecuta todos los días a las 12:00 de la noche en punto.
+    @Scheduled(cron = "0 0 0 * * ?") 
+    public void ejecutarCierreAutomatico() {
+        try {
+            System.out.println("⏰ [AUTO] Iniciando Cierre Automático de Cajas olvidadas...");
+            
+            // Ejecutamos el SP que cierra todo lo que quedó en estado 'ABIERTO'
+            jdbcTemplate.update("EXEC sp_Caja_CierreAutomatico");
+            
+            System.out.println("✅ [AUTO] Cierre Automático completado con éxito.");
+        } catch (Exception e) {
+            System.err.println("❌ [AUTO] Error al ejecutar cierre automático: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 }

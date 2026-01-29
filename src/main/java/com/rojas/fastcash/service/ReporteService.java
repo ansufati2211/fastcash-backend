@@ -12,34 +12,22 @@ public class ReporteService {
     @Autowired private JdbcTemplate jdbcTemplate;
 
     // ==========================================
-    // 1. REPORTE GENERAL DE VENTAS
+    // 1. REPORTE GENERAL DE VENTAS (MEJORADO CON COLUMNAS EXTRA)
     // ==========================================
     public List<Map<String, Object>> obtenerReporteVentas(String inicio, String fin, Integer usuarioID) {
+        // Valores por defecto si vienen vacíos
         if (inicio == null || inicio.isEmpty()) inicio = LocalDate.now().toString();
         if (fin == null || fin.isEmpty()) fin = LocalDate.now().toString();
 
-        StringBuilder sql = new StringBuilder();
-        sql.append("SELECT v.VentaID, u.NombreCompleto as Cajero, ")
-           .append("CONCAT(v.SerieComprobante, '-', v.NumeroComprobante) as Ticket, ")
-           .append("tc.Nombre as TipoDoc, ")
-           .append("v.ImporteTotal, FORMAT(v.FechaEmision, 'dd/MM/yyyy HH:mm') as Fecha, v.Estado ")
-           .append("FROM Ventas v ")
-           .append("JOIN Usuarios u ON v.UsuarioID = u.UsuarioID ")
-           .append("JOIN TiposComprobante tc ON v.TipoComprobanteID = tc.TipoID ")
-           // Comparación segura por texto YYYY-MM-DD
-           .append("WHERE CAST(v.FechaEmision AS DATE) >= CAST(? AS DATE) AND CAST(v.FechaEmision AS DATE) <= CAST(? AS DATE) ");
+        // Si usuarioID es 0 o negativo, lo mandamos como NULL al SP para que traiga todo
+        Integer uidParam = (usuarioID != null && usuarioID > 0) ? usuarioID : null;
+
+        // Llamamos al SP 'sp_Reporte_DetalladoVentas' que ya incluye:
+        // [Nro Operacion / Lote] y [Ticket Fisico] (Boleta Manual)
+        // El último parámetro es el MetodoPago (NULL = todos)
+        String sql = "EXEC sp_Reporte_DetalladoVentas ?, ?, ?, NULL";
         
-        List<Object> params = new ArrayList<>();
-        params.add(inicio);
-        params.add(fin);
-
-        if (usuarioID != null && usuarioID > 0) {
-            sql.append(" AND v.UsuarioID = ? ");
-            params.add(usuarioID);
-        }
-
-        sql.append(" ORDER BY v.VentaID DESC");
-        return jdbcTemplate.queryForList(sql.toString(), params.toArray());
+        return jdbcTemplate.queryForList(sql, inicio, fin, uidParam);
     }
 
     // ==========================================
@@ -48,11 +36,13 @@ public class ReporteService {
     public List<Map<String, Object>> obtenerReporteCajas(String inicio, String fin, Integer usuarioID) {
         if (inicio == null || inicio.isEmpty()) inicio = LocalDate.now().toString();
         if (fin == null || fin.isEmpty()) fin = LocalDate.now().toString();
+        
+        // Llamada al SP existente
         return jdbcTemplate.queryForList("EXEC sp_Reporte_PorCaja ?, ?, ?", inicio, fin, usuarioID);
     }
 
     // ================================================================
-    // 3. DASHBOARD DE GRÁFICOS (VERSIÓN TEXTO PURO) 🛡️
+    // 3. DASHBOARD DE GRÁFICOS (VERSIÓN ROBUSTA) 🛡️
     // ================================================================
     public Map<String, Object> obtenerDatosGraficos(String fechaStr, Integer usuarioID) {
         // Usamos la fecha como String simple "yyyy-MM-dd"
@@ -72,8 +62,6 @@ public class ReporteService {
         }
 
         // SQL 1: Categorías 
-        // TRUCO: CONVERT(VARCHAR(10), v.FechaEmision, 120) convierte la fecha a "yyyy-MM-dd"
-        // Así comparamos Texto vs Texto. ¡No falla nunca!
         String sqlCat = "SELECT " +
                         "   ISNULL(c.Nombre, 'Sin Categoría') as label, " + 
                         "   ISNULL(SUM(vd.Monto), 0) as value " +
@@ -96,19 +84,21 @@ public class ReporteService {
                          filtroUsuario +
                          "GROUP BY p.FormaPago";
 
+        // Ejecutamos las consultas con la misma lista de parámetros (reutilizada)
         List<Map<String, Object>> catResult = jdbcTemplate.queryForList(sqlCat, params.toArray());
         List<Map<String, Object>> pagoResult = jdbcTemplate.queryForList(sqlPago, params.toArray());
 
-        System.out.println("   -> Resultados Categorias: " + catResult.size()); // Mira tu consola, debe ser > 0
-        System.out.println("   -> Resultados Pagos: " + pagoResult.size());     // Mira tu consola, debe ser > 0
+        System.out.println("   -> Resultados Categorias: " + catResult.size());
+        System.out.println("   -> Resultados Pagos: " + pagoResult.size());
 
+        // Limpiamos los nombres de las claves para que el JS no falle (label/value en minúscula)
         resultado.put("categorias", forzarMinusculas(catResult));
         resultado.put("pagos", forzarMinusculas(pagoResult));
         
         return resultado;
     }
     
-    // --- FUNCIÓN AUXILIAR (Vital para que el Frontend entienda 'label' y 'value') ---
+    // --- FUNCIÓN AUXILIAR (Vital para los gráficos) ---
     private List<Map<String, Object>> forzarMinusculas(List<Map<String, Object>> listaOriginal) {
         List<Map<String, Object>> listaLimpia = new ArrayList<>();
         for (Map<String, Object> fila : listaOriginal) {
@@ -129,13 +119,14 @@ public class ReporteService {
     }
 
     // ==========================================
-    // 4. CIERRE ACTUAL
+    // 4. CIERRE ACTUAL (TICKET)
     // ==========================================
     public Map<String, Object> obtenerCierreActual(Integer usuarioID) {
         try {
+            // Este SP ya fue actualizado para traer el TurnoNombre
             return jdbcTemplate.queryForMap("EXEC sp_Operacion_ObtenerCierreActual ?", usuarioID);
         } catch (Exception e) {
-            // Manejo silencioso: si no hay caja abierta, retorna 0
+            // Manejo silencioso: si no hay caja abierta, retorna vacíos para no romper el front
             Map<String, Object> vacio = new HashMap<>();
             vacio.put("SaldoInicial", 0);
             vacio.put("VentasEfectivo", 0);
@@ -143,6 +134,7 @@ public class ReporteService {
             vacio.put("VentasTarjeta", 0);
             vacio.put("TotalVendido", 0);
             vacio.put("SaldoEsperadoEnCaja", 0);
+            vacio.put("TurnoNombre", "GENERAL"); 
             return vacio;
         }
     }
