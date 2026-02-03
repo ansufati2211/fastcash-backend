@@ -38,10 +38,11 @@ public class VentaService {
         }
 
         try {
-            // 3. Ejecutar SP (ACTUALIZADO)
-            // Nota: Cambié el nombre a 'sp_Ventas_Registrar' para coincidir con el script SQL
-            // y agregué el parámetro @ComprobanteExterno al final.
-            String sql = "EXEC sp_Ventas_Registrar @UsuarioID=?, @TipoComprobanteID=?, @ClienteDoc=?, @ClienteNombre=?, @JsonDetalles=?, @JsonPagos=?, @ComprobanteExterno=?";
+            // 3. Ejecutar Función Postgres (CORREGIDO)
+            // - Usamos SELECT * FROM en lugar de EXEC
+            // - Usamos ?::json para forzar que Postgres entienda el string como objeto JSON
+            // - Usamos la función 'sp_ventas_registrar' que coincide con los 7 parámetros
+            String sql = "SELECT * FROM sp_ventas_registrar(?, ?, ?, ?, ?::json, ?::json, ?)";
             
             return jdbcTemplate.queryForMap(sql,
                     request.getUsuarioID(),
@@ -50,7 +51,7 @@ public class VentaService {
                     request.getClienteNombre(),
                     objectMapper.writeValueAsString(request.getDetalles()),
                     objectMapper.writeValueAsString(request.getPagos()),
-                    request.getComprobanteExterno() // <--- AQUÍ PASAMOS EL DATO NUEVO
+                    request.getComprobanteExterno()
             );
 
         } catch (Exception e) {
@@ -63,14 +64,15 @@ public class VentaService {
     // LISTAR HISTORIAL
     // =========================================================================
     public List<Map<String, Object>> listarHistorialDia(Integer usuarioID, Integer filtroUsuarioID) {
-        // Asegúrate de que este SP (sp_HistorialVentas_Filtrado) 
-        // tenga la lógica del CASE que te pasé para ver el Código Externo.
-        String sql = "EXEC sp_HistorialVentas_Filtrado ?, ?";
+        // CORREGIDO: Sintaxis Postgres
+        String sql = "SELECT * FROM sp_historialventas_filtrado(?, ?)";
         return jdbcTemplate.queryForList(sql, usuarioID, filtroUsuarioID);
     }
 
     @Transactional
     public Map<String, Object> anularVenta(AnulacionRequest request) {
-        return jdbcTemplate.queryForMap("EXEC sp_Operacion_AnularVenta ?, ?, ?", request.getVentaID(), request.getUsuarioID(), request.getMotivo());
+        // CORREGIDO: Sintaxis Postgres
+        String sql = "SELECT * FROM sp_operacion_anularventa(?, ?, ?)";
+        return jdbcTemplate.queryForMap(sql, request.getVentaID(), request.getUsuarioID(), request.getMotivo());
     }
 }

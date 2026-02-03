@@ -28,6 +28,11 @@ public class Usuario {
 
     @Column(name = "Activo")
     private Boolean activo;
+    
+    // --- CAMPO AGREGADO PARA SINCRONIZAR CON SQL ---
+    @Column(name = "FechaRegistro", insertable = false, updatable = false)
+    private LocalDateTime fechaRegistro;
+    // -----------------------------------------------
 
     @Column(name = "UltimoAcceso")
     private LocalDateTime ultimoAcceso;

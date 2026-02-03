@@ -13,25 +13,33 @@ public class AuthRepository {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    // Método para Login
+    // LOGIN
     public Map<String, Object> ejecutarSpLogin(String username, String password) {
-        String sql = "EXEC sp_Auth_Login @Username = ?, @PasswordHash = ?";
-        List<Map<String, Object>> resultados = jdbcTemplate.queryForList(sql, username, password);
-        if (resultados.isEmpty()) {
-            return null;
+        // CAMBIO POSTGRES:
+        // 1. Usamos SELECT * FROM funcion()
+        // 2. Quitamos los nombres de parámetros (@Username=) porque JDBC usa posición (?)
+        String sql = "SELECT * FROM sp_auth_login(?, ?)";
+        
+        try {
+            List<Map<String, Object>> resultados = jdbcTemplate.queryForList(sql, username, password);
+            
+            if (resultados.isEmpty()) {
+                return null;
+            }
+            return resultados.get(0);
+        } catch (Exception e) {
+            // Postgres lanza error si las credenciales fallan (por el RAISE EXCEPTION del script)
+            return null; 
         }
-        return resultados.get(0);
     }
 
-    // =========================================================================
-    //  NUEVO MÉTODO: ACTUALIZAR USUARIO (Incluye TurnoID)
-    // =========================================================================
+    // ACTUALIZAR USUARIO
     public void actualizarUsuario(Integer id, String nombre, String username, Integer rolId, Integer turnoId, Boolean activo, String password) {
-        // Orden exacto de los parámetros en tu SP SQL:
-        // @UsuarioID, @Nombre, @Username, @RolID, @TurnoID, @Activo, @Password
-        String sql = "EXEC sp_Admin_ActualizarUsuario ?, ?, ?, ?, ?, ?, ?";
+        // CAMBIO POSTGRES:
+        // Llamada a función VOID con SELECT
+        String sql = "SELECT sp_admin_actualizarusuario(?, ?, ?, ?, ?, ?, ?)";
         
-        // Ejecutamos la actualización
+        // Ejecutamos la actualización (en Postgres usamos execute o query, update funciona pero es semántica)
         jdbcTemplate.update(sql, id, nombre, username, rolId, turnoId, activo, password);
     }
 }

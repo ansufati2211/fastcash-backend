@@ -4,7 +4,7 @@ import com.rojas.fastcash.dto.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional; // Importante para seguridad
+import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
@@ -16,7 +16,8 @@ public class AdminService {
 
     // 1. CREAR USUARIO
     public Map<String, Object> crearUsuario(CrearUsuarioRequest req) {
-        String sql = "INSERT INTO Usuarios (NombreCompleto, Username, Pswd, RolID, Activo, FechaRegistro) VALUES (?, ?, ?, ?, 1, GETDATE())";
+        // POSTGRES: Usamos TRUE para el booleano y NOW() para la fecha
+        String sql = "INSERT INTO Usuarios (NombreCompleto, Username, Pswd, RolID, Activo, FechaRegistro) VALUES (?, ?, ?, ?, TRUE, NOW())";
         
         jdbcTemplate.update(sql, 
             req.getNombreCompleto(), 
@@ -28,13 +29,13 @@ public class AdminService {
         return Map.of("mensaje", "Usuario creado correctamente", "status", "OK");
     }
 
-    // 2. ASIGNAR TURNO (Para asignaciones manuales directas)
+    // 2. ASIGNAR TURNO
     public Map<String, Object> asignarTurno(AsignarTurnoRequest req) {
-        // A. Desactivar turnos anteriores
-        jdbcTemplate.update("UPDATE UsuarioTurnos SET Activo=0 WHERE UsuarioID=?", req.getUsuarioID());
+        // A. Desactivar turnos anteriores (Activo = FALSE)
+        jdbcTemplate.update("UPDATE UsuarioTurnos SET Activo=FALSE WHERE UsuarioID=?", req.getUsuarioID());
         
-        // B. Insertar nuevo
-        String sql = "INSERT INTO UsuarioTurnos (UsuarioID, TurnoID, FechaAsignacion, AdminAsignaID, Activo) VALUES (?, ?, GETDATE(), ?, 1)";
+        // B. Insertar nuevo (NOW() y TRUE)
+        String sql = "INSERT INTO UsuarioTurnos (UsuarioID, TurnoID, FechaAsignacion, AdminAsignaID, Activo) VALUES (?, ?, CURRENT_DATE, ?, TRUE)";
         
         jdbcTemplate.update(sql,
                 req.getUsuarioID(), 
@@ -45,17 +46,18 @@ public class AdminService {
         return Map.of("mensaje", "Turno asignado correctamente", "status", "OK");
     }
 
-    // 3. LISTAR USUARIOS (Con Join para ver el Turno actual)
+    // 3. LISTAR USUARIOS
     public List<Map<String, Object>> listarTodosLosUsuarios() {
+        // POSTGRES: ISNULL -> COALESCE, Activo = 1 -> Activo = TRUE
         String sql = """
             SELECT u.UsuarioID, u.NombreCompleto, u.Username, r.Nombre as Rol, u.Activo,
-                   ISNULL(t.Nombre, 'Sin Turno') AS TurnoActual,
-                   ISNULL(t.TurnoID, 0) AS TurnoID
+                   COALESCE(t.Nombre, 'Sin Turno') AS TurnoActual,
+                   COALESCE(t.TurnoID, 0) AS TurnoID
             FROM Usuarios u 
             JOIN Roles r ON u.RolID = r.RolID
             LEFT JOIN (
                 SELECT UsuarioID, TurnoID, ROW_NUMBER() OVER(PARTITION BY UsuarioID ORDER BY FechaAsignacion DESC) as rn
-                FROM UsuarioTurnos WHERE Activo = 1
+                FROM UsuarioTurnos WHERE Activo = TRUE
             ) ult ON u.UsuarioID = ult.UsuarioID AND ult.rn = 1
             LEFT JOIN Turnos t ON ult.TurnoID = t.TurnoID
             ORDER BY u.UsuarioID DESC
@@ -63,52 +65,45 @@ public class AdminService {
         return jdbcTemplate.queryForList(sql);
     }
 
-    // =========================================================================
-    // 4. ACTUALIZAR USUARIO (¡AQUÍ ESTABA EL ERROR Y ESTA ES LA CORRECCIÓN!) 🚨
-    // =========================================================================
+    // 4. ACTUALIZAR USUARIO
     @Transactional
     public Map<String, Object> actualizarUsuario(ActualizarUsuarioRequest req) {
-        
-        // Lógica de seguridad: Si activo es nulo, asumimos true para no bloquear
         boolean estadoFinal = (req.getActivo() != null) ? req.getActivo() : true;
 
-        // Usamos el SP Inteligente que creamos en SQL
-        // Este SP actualiza los datos personales Y TAMBIÉN gestiona el cambio de turno si es necesario.
-        String sql = "EXEC sp_Admin_ActualizarUsuario " +
-                     "@UsuarioID = ?, " +
-                     "@Nombre = ?, " +
-                     "@Username = ?, " +
-                     "@RolID = ?, " +
-                     "@TurnoID = ?, " +   // <--- ¡CRUCIAL! Pasamos el turno
-                     "@Activo = ?, " +    // <--- ¡CRUCIAL! Pasamos el estado
-                     "@Password = ?";
+        // POSTGRES: Llamamos a la función como si fuera un SELECT
+        String sql = "SELECT sp_admin_actualizarusuario(?, ?, ?, ?, ?, ?, ?)";
                      
         try {
-            jdbcTemplate.update(sql,
-                req.getUsuarioID(),
-                req.getNombreCompleto(), // Usamos nombreCompleto del DTO
-                req.getUsername(),
-                req.getRolID(),
-                req.getTurnoID(),        // Enviamos el nuevo turno al SQL
-                estadoFinal,             // Enviamos el estado (true/false)
-                req.getPassword()        // Si es vacío, el SP lo ignora
-            );
+            // execute con callback porque retorna VOID
+            jdbcTemplate.execute(sql, (org.springframework.jdbc.core.PreparedStatementCallback<Boolean>) ps -> {
+                ps.setInt(1, req.getUsuarioID());
+                ps.setString(2, req.getNombreCompleto());
+                ps.setString(3, req.getUsername());
+                ps.setInt(4, req.getRolID());
+                
+                if (req.getTurnoID() != null) ps.setInt(5, req.getTurnoID());
+                else ps.setNull(5, java.sql.Types.INTEGER);
+                
+                ps.setBoolean(6, estadoFinal);
+                ps.setString(7, req.getPassword());
+                
+                return ps.execute();
+            });
             
-            // Retornamos un mapa de éxito
             Map<String, Object> response = new HashMap<>();
             response.put("mensaje", "Usuario y Turno actualizados correctamente");
             response.put("status", "OK");
             return response;
 
         } catch (Exception e) {
-            // Error amigable
             throw new RuntimeException("Error al actualizar usuario: " + e.getMessage());
         }
     }
 
-    // 5. ELIMINAR USUARIO (Desactivación Lógica)
+    // 5. ELIMINAR USUARIO
     public void eliminarUsuario(Integer usuarioID) {
-        String sql = "UPDATE Usuarios SET Activo = 0 WHERE UsuarioID = ?";
+        // POSTGRES: Activo = FALSE
+        String sql = "UPDATE Usuarios SET Activo = FALSE WHERE UsuarioID = ?";
         jdbcTemplate.update(sql, usuarioID);
     }
 }
