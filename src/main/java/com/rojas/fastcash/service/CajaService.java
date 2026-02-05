@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.PreparedStatement;
+import java.sql.Types; // <--- 1. ¡ESTE IMPORT ES LA CLAVE QUE FALTABA!
 import java.math.BigDecimal;
 import java.util.Map;
 import java.util.Optional;
@@ -34,6 +35,7 @@ public class CajaService {
             throw new RuntimeException("⚠️ Ya tienes una caja ABIERTA.");
         }
         
+        // Aquí te funcionaba porque usabas PreparedStatement manual
         String sql = "SELECT sp_caja_abrir(?, ?)";
         BigDecimal saldo = request.getSaldoInicial() != null ? request.getSaldoInicial() : BigDecimal.ZERO;
         
@@ -54,10 +56,20 @@ public class CajaService {
         if (sesionRepo.buscarSesionAbierta(request.getUsuarioID()).isEmpty()) {
             throw new RuntimeException("⚠️ No tienes una caja abierta para cerrar.");
         }
+
         String sql = "SELECT * FROM sp_caja_cerrar(?, ?)";
+        BigDecimal saldoFinal = request.getSaldoFinalReal() != null ? request.getSaldoFinalReal() : BigDecimal.ZERO;
+
         try {
-            return jdbcTemplate.queryForMap(sql, request.getUsuarioID(), request.getSaldoFinalReal());
+            // 2. CORRECCIÓN: Definimos explícitamente los TIPOS DE DATOS.
+            // Si no hacemos esto, Postgres recibe "tipos desconocidos" y lanza "Bad SQL Grammar".
+            Object[] args = new Object[] { request.getUsuarioID(), saldoFinal };
+            int[] argTypes = new int[] { Types.INTEGER, Types.NUMERIC }; // <--- ¡ESTO LO ARREGLA!
+
+            return jdbcTemplate.queryForMap(sql, args, argTypes);
+
         } catch (Exception e) {
+            System.err.println("❌ Error Cierre Caja: " + e.getMessage());
             throw new RuntimeException("Error al cerrar caja: " + e.getMessage());
         }
     }
