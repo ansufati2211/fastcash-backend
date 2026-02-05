@@ -13,7 +13,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.PreparedStatement;
-import java.sql.Types; // <--- 1. ¡ESTE IMPORT ES LA CLAVE QUE FALTABA!
 import java.math.BigDecimal;
 import java.util.Map;
 import java.util.Optional;
@@ -32,10 +31,10 @@ public class CajaService {
     public void abrirCaja(AperturaCajaRequest request) {
         Optional<SesionCaja> sesionActual = sesionRepo.buscarSesionAbierta(request.getUsuarioID());
         if (sesionActual.isPresent()) {
-            throw new RuntimeException("⚠️ Ya tienes una caja ABIERTA.");
+            throw new RuntimeException("⚠️ Ya tienes una caja ABIERTA. Debes cerrar la actual antes de abrir una nueva.");
         }
         
-        // Aquí te funcionaba porque usabas PreparedStatement manual
+        // Usamos SELECT para llamar a la función en Postgres
         String sql = "SELECT sp_caja_abrir(?, ?)";
         BigDecimal saldo = request.getSaldoInicial() != null ? request.getSaldoInicial() : BigDecimal.ZERO;
         
@@ -57,39 +56,49 @@ public class CajaService {
             throw new RuntimeException("⚠️ No tienes una caja abierta para cerrar.");
         }
 
-        String sql = "SELECT * FROM sp_caja_cerrar(?, ?)";
+        // =========================================================================
+        // CORRECCIÓN CRÍTICA PARA POSTGRESQL
+        // Usamos casting explícito (?::integer, ?::numeric) en la cadena SQL.
+        // Esto elimina la ambigüedad y evita el error "Bad SQL Grammar".
+        // =========================================================================
+        String sql = "SELECT * FROM sp_caja_cerrar(?::integer, ?::numeric)";
+        
         BigDecimal saldoFinal = request.getSaldoFinalReal() != null ? request.getSaldoFinalReal() : BigDecimal.ZERO;
 
         try {
-            // 2. CORRECCIÓN: Definimos explícitamente los TIPOS DE DATOS.
-            // Si no hacemos esto, Postgres recibe "tipos desconocidos" y lanza "Bad SQL Grammar".
-            Object[] args = new Object[] { request.getUsuarioID(), saldoFinal };
-            int[] argTypes = new int[] { Types.INTEGER, Types.NUMERIC }; // <--- ¡ESTO LO ARREGLA!
-
-            return jdbcTemplate.queryForMap(sql, args, argTypes);
-
+            return jdbcTemplate.queryForMap(sql, request.getUsuarioID(), saldoFinal);
         } catch (Exception e) {
+            // Imprimimos el error en consola para depuración
             System.err.println("❌ Error Cierre Caja: " + e.getMessage());
+            e.printStackTrace();
             throw new RuntimeException("Error al cerrar caja: " + e.getMessage());
         }
     }
 
+    // =========================================================================
+    // LÓGICA DE CIERRE AUTOMÁTICO
+    // =========================================================================
+
+    // 1. EJECUCIÓN PROGRAMADA: Medianoche (00:00 AM)
     @Scheduled(cron = "0 0 0 * * ?", zone = "America/Lima") 
     public void cierreProgramadoMedianoche() {
         ejecutarLimpiezaCajas("Medianoche");
     }
 
+    // 2. EJECUCIÓN AL INICIO: Por si el servidor estaba apagado en la noche
     @EventListener(ApplicationReadyEvent.class)
     public void cierreAlIniciarSistema() {
         ejecutarLimpiezaCajas("InicioSistema");
     }
 
+    // Método privado reutilizable
     private void ejecutarLimpiezaCajas(String origen) {
         try {
+            // En Postgres usamos SELECT * FROM funcion() para ejecutarla
             jdbcTemplate.execute("SELECT * FROM sp_caja_cierreautomatico()");
             System.out.println("✅ [AUTO-CIERRE] Limpieza completada (Origen: " + origen + ").");
         } catch (Exception e) {
-            System.err.println("❌ [AUTO-CIERRE] Error: " + e.getMessage());
+            System.err.println("❌ [AUTO-CIERRE] Error ejecutando limpieza: " + e.getMessage());
         }
     }
 }
