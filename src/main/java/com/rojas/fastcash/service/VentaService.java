@@ -21,12 +21,9 @@ public class VentaService {
 
     @Transactional
     public Map<String, Object> registrarVenta(RegistroVentaRequest request) {
-        
-        // 1. Validar Caja
         SesionCaja sesion = cajaService.obtenerSesionActual(request.getUsuarioID());
         if (sesion == null) throw new RuntimeException("CAJA CERRADA: Debe abrir caja antes de vender.");
 
-        // 2. Validar Yape/Tarjeta
         if (request.getPagos() != null) {
             for (PagoVentaDTO pago : request.getPagos()) {
                 if (!"EFECTIVO".equals(pago.getFormaPago())) {
@@ -38,10 +35,7 @@ public class VentaService {
         }
 
         try {
-            // 3. Ejecutar Función Postgres (CORREGIDO)
-            // - Usamos SELECT * FROM en lugar de EXEC
-            // - Usamos ?::json para forzar que Postgres entienda el string como objeto JSON
-            // - Usamos la función 'sp_ventas_registrar' que coincide con los 7 parámetros
+            // POSTGRES: Cast ?::json
             String sql = "SELECT * FROM sp_ventas_registrar(?, ?, ?, ?, ?::json, ?::json, ?)";
             
             return jdbcTemplate.queryForMap(sql,
@@ -56,22 +50,18 @@ public class VentaService {
 
         } catch (Exception e) {
             String msg = e.getCause() != null ? e.getCause().getMessage() : e.getMessage();
+            if (msg.contains("ERROR:")) msg = msg.substring(msg.indexOf("ERROR:") + 7).split("\n")[0];
             throw new RuntimeException("Error: " + msg);
         }
     }
 
-    // =========================================================================
-    // LISTAR HISTORIAL
-    // =========================================================================
     public List<Map<String, Object>> listarHistorialDia(Integer usuarioID, Integer filtroUsuarioID) {
-        // CORREGIDO: Sintaxis Postgres
         String sql = "SELECT * FROM sp_historialventas_filtrado(?, ?)";
         return jdbcTemplate.queryForList(sql, usuarioID, filtroUsuarioID);
     }
 
     @Transactional
     public Map<String, Object> anularVenta(AnulacionRequest request) {
-        // CORREGIDO: Sintaxis Postgres
         String sql = "SELECT * FROM sp_operacion_anularventa(?, ?, ?)";
         return jdbcTemplate.queryForMap(sql, request.getVentaID(), request.getUsuarioID(), request.getMotivo());
     }

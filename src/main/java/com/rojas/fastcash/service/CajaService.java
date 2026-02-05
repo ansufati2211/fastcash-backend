@@ -12,6 +12,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.PreparedStatement;
 import java.math.BigDecimal;
 import java.util.Map;
 import java.util.Optional;
@@ -30,15 +31,14 @@ public class CajaService {
     public void abrirCaja(AperturaCajaRequest request) {
         Optional<SesionCaja> sesionActual = sesionRepo.buscarSesionAbierta(request.getUsuarioID());
         if (sesionActual.isPresent()) {
-            throw new RuntimeException("⚠️ Ya tienes una caja ABIERTA. Debes cerrar la actual antes de abrir una nueva.");
+            throw new RuntimeException("⚠️ Ya tienes una caja ABIERTA.");
         }
         
-        // POSTGRES: SELECT para llamar función
         String sql = "SELECT sp_caja_abrir(?, ?)";
         BigDecimal saldo = request.getSaldoInicial() != null ? request.getSaldoInicial() : BigDecimal.ZERO;
         
         try {
-            jdbcTemplate.execute(sql, (org.springframework.jdbc.core.PreparedStatementCallback<Boolean>) ps -> {
+            jdbcTemplate.execute(sql, (PreparedStatement ps) -> {
                 ps.setInt(1, request.getUsuarioID());
                 ps.setBigDecimal(2, saldo);
                 return ps.execute();
@@ -54,7 +54,6 @@ public class CajaService {
         if (sesionRepo.buscarSesionAbierta(request.getUsuarioID()).isEmpty()) {
             throw new RuntimeException("⚠️ No tienes una caja abierta para cerrar.");
         }
-        // POSTGRES: SELECT * FROM funcion()
         String sql = "SELECT * FROM sp_caja_cerrar(?, ?)";
         try {
             return jdbcTemplate.queryForMap(sql, request.getUsuarioID(), request.getSaldoFinalReal());
@@ -63,7 +62,6 @@ public class CajaService {
         }
     }
 
-    // LÓGICA DE CIERRE AUTOMÁTICO
     @Scheduled(cron = "0 0 0 * * ?", zone = "America/Lima") 
     public void cierreProgramadoMedianoche() {
         ejecutarLimpiezaCajas("Medianoche");
@@ -71,17 +69,15 @@ public class CajaService {
 
     @EventListener(ApplicationReadyEvent.class)
     public void cierreAlIniciarSistema() {
-        System.out.println("🚀 Sistema Iniciado. Verificando cajas olvidadas...");
         ejecutarLimpiezaCajas("InicioSistema");
     }
 
     private void ejecutarLimpiezaCajas(String origen) {
         try {
-            // POSTGRES
-            jdbcTemplate.queryForList("SELECT * FROM sp_caja_cierreautomatico()");
+            jdbcTemplate.execute("SELECT * FROM sp_caja_cierreautomatico()");
             System.out.println("✅ [AUTO-CIERRE] Limpieza completada (Origen: " + origen + ").");
         } catch (Exception e) {
-            System.err.println("❌ [AUTO-CIERRE] Error ejecutando limpieza: " + e.getMessage());
+            System.err.println("❌ [AUTO-CIERRE] Error: " + e.getMessage());
         }
     }
 }

@@ -25,7 +25,9 @@ public class MaestrosController {
         return maestrosService.listarEntidadesActivas();
     }
 
-    @GetMapping("/comprobantes")
+    // CORREGIDO: Cambiado de "/comprobantes" a "/tipos-comprobante"
+    // para coincidir con Postman y el Frontend
+    @GetMapping("/tipos-comprobante")
     public List<TipoComprobante> getComprobantes() {
         return maestrosService.listarComprobantes();
     }

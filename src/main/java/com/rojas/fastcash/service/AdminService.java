@@ -16,7 +16,7 @@ public class AdminService {
 
     // 1. CREAR USUARIO
     public Map<String, Object> crearUsuario(CrearUsuarioRequest req) {
-        // POSTGRES: Usamos TRUE para el booleano y NOW() para la fecha
+        // POSTGRES: Usamos NOW() en lugar de GETDATE()
         String sql = "INSERT INTO Usuarios (NombreCompleto, Username, Pswd, RolID, Activo, FechaRegistro) VALUES (?, ?, ?, ?, TRUE, NOW())";
         
         jdbcTemplate.update(sql, 
@@ -31,11 +31,10 @@ public class AdminService {
 
     // 2. ASIGNAR TURNO
     public Map<String, Object> asignarTurno(AsignarTurnoRequest req) {
-        // A. Desactivar turnos anteriores (Activo = FALSE)
         jdbcTemplate.update("UPDATE UsuarioTurnos SET Activo=FALSE WHERE UsuarioID=?", req.getUsuarioID());
         
-        // B. Insertar nuevo (NOW() y TRUE)
-        String sql = "INSERT INTO UsuarioTurnos (UsuarioID, TurnoID, FechaAsignacion, AdminAsignaID, Activo) VALUES (?, ?, CURRENT_DATE, ?, TRUE)";
+        // POSTGRES: Usamos NOW()
+        String sql = "INSERT INTO UsuarioTurnos (UsuarioID, TurnoID, FechaAsignacion, AdminAsignaID, Activo) VALUES (?, ?, NOW(), ?, TRUE)";
         
         jdbcTemplate.update(sql,
                 req.getUsuarioID(), 
@@ -48,7 +47,7 @@ public class AdminService {
 
     // 3. LISTAR USUARIOS
     public List<Map<String, Object>> listarTodosLosUsuarios() {
-        // POSTGRES: ISNULL -> COALESCE, Activo = 1 -> Activo = TRUE
+        // POSTGRES: Usamos COALESCE en lugar de ISNULL
         String sql = """
             SELECT u.UsuarioID, u.NombreCompleto, u.Username, r.Nombre as Rol, u.Activo,
                    COALESCE(t.Nombre, 'Sin Turno') AS TurnoActual,
@@ -70,23 +69,18 @@ public class AdminService {
     public Map<String, Object> actualizarUsuario(ActualizarUsuarioRequest req) {
         boolean estadoFinal = (req.getActivo() != null) ? req.getActivo() : true;
 
-        // POSTGRES: Llamamos a la función como si fuera un SELECT
+        // POSTGRES: Llamada a función
         String sql = "SELECT sp_admin_actualizarusuario(?, ?, ?, ?, ?, ?, ?)";
                      
         try {
-            // execute con callback porque retorna VOID
-            jdbcTemplate.execute(sql, (org.springframework.jdbc.core.PreparedStatementCallback<Boolean>) ps -> {
+            jdbcTemplate.execute(sql, (java.sql.PreparedStatement ps) -> {
                 ps.setInt(1, req.getUsuarioID());
                 ps.setString(2, req.getNombreCompleto());
                 ps.setString(3, req.getUsername());
                 ps.setInt(4, req.getRolID());
-                
-                if (req.getTurnoID() != null) ps.setInt(5, req.getTurnoID());
-                else ps.setNull(5, java.sql.Types.INTEGER);
-                
+                ps.setInt(5, req.getTurnoID());
                 ps.setBoolean(6, estadoFinal);
                 ps.setString(7, req.getPassword());
-                
                 return ps.execute();
             });
             
@@ -102,7 +96,6 @@ public class AdminService {
 
     // 5. ELIMINAR USUARIO
     public void eliminarUsuario(Integer usuarioID) {
-        // POSTGRES: Activo = FALSE
         String sql = "UPDATE Usuarios SET Activo = FALSE WHERE UsuarioID = ?";
         jdbcTemplate.update(sql, usuarioID);
     }
