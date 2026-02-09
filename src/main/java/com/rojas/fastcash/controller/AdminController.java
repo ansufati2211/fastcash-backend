@@ -1,10 +1,7 @@
 package com.rojas.fastcash.controller;
 
-import com.rojas.fastcash.dto.ActualizarUsuarioRequest;
-import com.rojas.fastcash.dto.AsignarTurnoRequest;
-import com.rojas.fastcash.dto.CrearUsuarioRequest;
+import com.rojas.fastcash.dto.*;
 import com.rojas.fastcash.service.AdminService;
-import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -14,64 +11,54 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/admin")
-@CrossOrigin(origins = "*")
 public class AdminController {
 
-    @Autowired private AdminService adminService;
+    @Autowired
+    private AdminService adminService;
 
+    // ==========================================
     // 1. CREAR USUARIO
-    @PostMapping("/crear-usuario")
-    public ResponseEntity<?> crearUsuario(@Valid @RequestBody CrearUsuarioRequest request) {
-        try {
-            Map<String, Object> resultado = adminService.crearUsuario(request);
-            return ResponseEntity.ok(resultado);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-        }
+    // URL: POST http://localhost:8080/api/admin/usuario
+    // ==========================================
+    @PostMapping("/usuario") 
+    public ResponseEntity<Map<String, Object>> crearUsuario(@RequestBody CrearUsuarioRequest req) {
+        return ResponseEntity.ok(adminService.crearUsuario(req));
     }
 
-    // 2. ASIGNAR TURNO
-    @PostMapping("/asignar-turno")
-    public ResponseEntity<?> asignarTurno(@Valid @RequestBody AsignarTurnoRequest request) {
-        try {
-            Map<String, Object> resultado = adminService.asignarTurno(request);
-            return ResponseEntity.ok(resultado);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-        }
-    }
-
-    // 3. LISTAR USUARIOS
+    // ==========================================
+    // 2. LISTAR USUARIOS
+    // URL: GET http://localhost:8080/api/admin/usuarios
+    // ==========================================
     @GetMapping("/usuarios")
-    public ResponseEntity<?> listarUsuarios() {
-        try {
-            List<Map<String, Object>> usuarios = adminService.listarTodosLosUsuarios();
-            return ResponseEntity.ok(usuarios);
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
-        }
+    public ResponseEntity<List<Map<String, Object>>> listarUsuarios() {
+        return ResponseEntity.ok(adminService.listarTodosLosUsuarios());
     }
 
-    // 4. ACTUALIZAR USUARIO
-    @PutMapping("/actualizar")
-    public ResponseEntity<?> actualizarUsuario(@RequestBody ActualizarUsuarioRequest request) {
-        try {
-            adminService.actualizarUsuario(request);
-            return ResponseEntity.ok(Map.of("mensaje", "Usuario actualizado correctamente"));
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-        }
+    // ==========================================
+    // 3. ACTUALIZAR USUARIO
+    // URL: PUT http://localhost:8080/api/admin/usuario
+    // ==========================================
+    @PutMapping("/usuario")
+    public ResponseEntity<Map<String, Object>> actualizarUsuario(@RequestBody ActualizarUsuarioRequest req) {
+        return ResponseEntity.ok(adminService.actualizarUsuario(req));
     }
 
-    // 5. ELIMINAR (DESACTIVAR) USUARIO
-    @DeleteMapping("/eliminar/{id}")
-    public ResponseEntity<?> eliminarUsuario(@PathVariable Integer id) {
-        try {
-            adminService.eliminarUsuario(id);
-            return ResponseEntity.ok(Map.of("mensaje", "Usuario desactivado correctamente"));
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
-        }
+    // ==========================================
+    // 4. ASIGNAR TURNO
+    // URL: POST http://localhost:8080/api/admin/turno
+    // ==========================================
+    @PostMapping("/turno")
+    public ResponseEntity<Map<String, Object>> asignarTurno(@RequestBody AsignarTurnoRequest req) {
+        return ResponseEntity.ok(adminService.asignarTurno(req));
+    }
+
+    // ==========================================
+    // 5. ELIMINAR USUARIO
+    // URL: DELETE http://localhost:8080/api/admin/usuario/{id}
+    // ==========================================
+    @DeleteMapping("/usuario/{id}")
+    public ResponseEntity<Void> eliminarUsuario(@PathVariable Integer id) {
+        adminService.eliminarUsuario(id);
+        return ResponseEntity.ok().build();
     }
 }

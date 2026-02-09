@@ -1,41 +1,55 @@
 package com.rojas.fastcash.service;
 
 import com.rojas.fastcash.dto.LoginRequest;
+import com.rojas.fastcash.entity.Usuario;
+import com.rojas.fastcash.repository.AuthRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
 
 @Service
 public class AuthService {
 
     @Autowired
-    private JdbcTemplate jdbcTemplate;
+    private AuthRepository authRepository;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     public Map<String, Object> login(LoginRequest request) {
-        // POSTGRES: Usamos SELECT * FROM funcion()
-        String sql = "SELECT * FROM sp_auth_login(?, ?)";
+        
+        // 1. BUSCAR USUARIO
+        Usuario usuario = authRepository.findByUsername(request.getUsername());
 
-        try {
-            List<Map<String, Object>> resultados = jdbcTemplate.queryForList(
-                sql, 
-                request.getUsername(), 
-                request.getPassword()
-            );
-
-            if (resultados.isEmpty()) {
-                throw new RuntimeException("Usuario o contraseña incorrectos.");
-            }
-            
-            return resultados.get(0);
-
-        } catch (Exception e) {
-            // Limpiamos el mensaje de error de Postgres
-            String msg = e.getCause() != null ? e.getCause().getMessage() : e.getMessage();
-            if (msg.contains("Where:")) msg = msg.split("Where:")[0];
-            throw new RuntimeException(msg);
+        // 2. VALIDACIONES
+        if (usuario == null) {
+            throw new RuntimeException("Usuario no encontrado.");
         }
+
+        if (!Boolean.TRUE.equals(usuario.getActivo())) {
+            throw new RuntimeException("El usuario se encuentra inactivo.");
+        }
+
+        // 3. COMPARAR CONTRASEÑA
+        // CORRECCIÓN: Usamos .getPassword() que es el getter generado por Lombok para el campo 'password'
+        if (!passwordEncoder.matches(request.getPassword(), usuario.getPassword())) {
+            throw new RuntimeException("Contraseña incorrecta.");
+        }
+
+        // 4. RESPUESTA EXITOSA
+        Map<String, Object> respuesta = new HashMap<>();
+        respuesta.put("UsuarioID", usuario.getUsuarioID());
+        respuesta.put("NombreCompleto", usuario.getNombreCompleto());
+        respuesta.put("Username", usuario.getUsername());
+        
+        String rolNombre = (usuario.getRol() != null) ? usuario.getRol().getNombre() : "SIN_ROL";
+        respuesta.put("Rol", rolNombre);
+        
+        respuesta.put("Mensaje", "Login Exitoso");
+
+        return respuesta;
     }
 }

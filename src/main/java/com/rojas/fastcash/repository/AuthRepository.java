@@ -1,30 +1,16 @@
 package com.rojas.fastcash.repository;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.JdbcTemplate;
+import com.rojas.fastcash.entity.Usuario;
+import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
-import java.util.List;
-import java.util.Map;
 
+// ⚠️ CAMBIO IMPORTANTE: Ahora es 'interface', no 'class'
+// Extiende de JpaRepository para tener métodos gratis: save, findAll, delete, etc.
 @Repository
-public class AuthRepository {
+public interface AuthRepository extends JpaRepository<Usuario, Integer> {
 
-    @Autowired
-    private JdbcTemplate jdbcTemplate;
+    // Spring Data JPA implementa esto automáticamente por el nombre
+    // SELECT * FROM Usuarios WHERE Username = ?
+    Usuario findByUsername(String username);
 
-    public Map<String, Object> ejecutarSpLogin(String username, String password) {
-        // POSTGRES: SELECT * FROM function
-        String sql = "SELECT * FROM sp_auth_login(?, ?)";
-        List<Map<String, Object>> resultados = jdbcTemplate.queryForList(sql, username, password);
-        if (resultados.isEmpty()) {
-            return null;
-        }
-        return resultados.get(0);
-    }
-
-    public void actualizarUsuario(Integer id, String nombre, String username, Integer rolId, Integer turnoId, Boolean activo, String password) {
-        // POSTGRES: Llamada a función
-        String sql = "SELECT sp_admin_actualizarusuario(?, ?, ?, ?, ?, ?, ?)";
-        jdbcTemplate.update(sql, id, nombre, username, rolId, turnoId, activo, password);
-    }
 }
