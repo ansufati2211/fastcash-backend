@@ -6,8 +6,8 @@ import lombok.Data;
 
 @Data
 public class CrearUsuarioRequest {
-    @NotNull(message = "El ID del administrador es obligatorio")
-    private Integer adminID; // Quién está creando al usuario (seguridad)
+    
+    private Integer adminId; // Opcional, si no se usa se puede quitar
 
     @NotBlank(message = "El nombre completo es obligatorio")
     private String nombreCompleto;
@@ -19,5 +19,8 @@ public class CrearUsuarioRequest {
     private String password;
 
     @NotNull(message = "El Rol ID es obligatorio (1=Admin, 2=Cajero)")
-    private Integer rolID;
+    private Integer rolId;
+
+    // ✅ NUEVO: Para asignar turno desde la creación
+    private Integer turnoId; 
 }

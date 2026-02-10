@@ -13,7 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects; // ✅ IMPORTANTE: Para eliminar el error de Null Safety
+import java.util.Objects; // ✅ IMPORTANTE
 
 @Service
 public class AdminService {
@@ -30,6 +30,7 @@ public class AdminService {
     // ==========================================
     // 1. CREAR USUARIO
     // ==========================================
+    @Transactional
     public Map<String, Object> crearUsuario(CrearUsuarioRequest req) {
         if (authRepository.findByUsername(req.getUsername()) != null) {
             throw new RuntimeException("El nombre de usuario ya existe.");
@@ -40,20 +41,24 @@ public class AdminService {
         u.setUsername(req.getUsername());
         
         // Encriptar contraseña
-        String hash = passwordEncoder.encode(req.getPassword());
-        u.setPassword(hash);
+        u.setPassword(passwordEncoder.encode(req.getPassword()));
 
-        // Null Safety: Convertir a int primitivo
-        int rolId = (req.getRolID() != null) ? req.getRolID().intValue() : 0;
+        // ✅ Null Safety para Rol (Default: Cajero=2)
+        int rolIdSafe = (req.getRolId() != null) ? req.getRolId().intValue() : 2;
         
         Rol rol = new Rol();
-        rol.setRolID(rolId);
+        rol.setRolID(rolIdSafe);
         u.setRol(rol);
 
         u.setActivo(true);
         u.setFechaRegistro(LocalDateTime.now());
 
-        authRepository.save(u);
+        Usuario usuarioGuardado = authRepository.save(u);
+
+        // ✅ Null Safety para Turno
+        if (req.getTurnoId() != null && req.getTurnoId().intValue() > 0) {
+            actualizarTurnoUsuario(usuarioGuardado.getUsuarioID(), req.getTurnoId());
+        }
 
         return Map.of("mensaje", "Usuario creado correctamente", "status", "OK");
     }
@@ -63,22 +68,22 @@ public class AdminService {
     // ==========================================
     @Transactional
     public Map<String, Object> actualizarUsuario(ActualizarUsuarioRequest req) {
-        // Validación manual primero
-        if (req.getUsuarioID() == null) {
+        // ✅ Validación estricta ID
+        Integer idRecibido = req.getUsuarioId();
+        if (idRecibido == null) {
             throw new RuntimeException("El ID de usuario es obligatorio.");
         }
 
-        // ✅ SOLUCIÓN DEFINITIVA NULL SAFETY:
-        // Objects.requireNonNull satisface al compilador de que el Integer NO es null.
-        Usuario u = authRepository.findById(Objects.requireNonNull(req.getUsuarioID()))
+        Usuario u = authRepository.findById(Objects.requireNonNull(idRecibido))
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
         u.setNombreCompleto(req.getNombreCompleto());
         u.setUsername(req.getUsername());
         
-        if (req.getRolID() != null) {
+        // ✅ Null Safety Rol
+        if (req.getRolId() != null) {
             Rol rol = new Rol();
-            rol.setRolID(req.getRolID().intValue());
+            rol.setRolID(req.getRolId().intValue());
             u.setRol(rol);
         }
 
@@ -88,40 +93,48 @@ public class AdminService {
 
         if (req.getPassword() != null && !req.getPassword().trim().isEmpty()) {
             if (!req.getPassword().startsWith("$2a$")) {
-                String hash = passwordEncoder.encode(req.getPassword());
-                u.setPassword(hash);
+                u.setPassword(passwordEncoder.encode(req.getPassword()));
             }
         }
 
         authRepository.save(u);
 
-        // Actualizar Turno
-        if (req.getTurnoID() != null && req.getTurnoID() > 0) {
-            actualizarTurnoUsuario(req.getUsuarioID(), req.getTurnoID());
+        // ✅ Null Safety Turno
+        if (req.getTurnoId() != null && req.getTurnoId().intValue() > 0) {
+            actualizarTurnoUsuario(req.getUsuarioId(), req.getTurnoId());
         }
 
         return Map.of("mensaje", "Usuario actualizado correctamente", "status", "OK");
     }
 
-    // Método auxiliar privado
+    // ==========================================
+    // 3. ACTUALIZAR TURNO (CORREGIDO PARA EVITAR DUPLICADOS)
+    // ==========================================
     private void actualizarTurnoUsuario(Integer usuarioID, Integer nuevoTurnoID) {
         if (usuarioID == null || nuevoTurnoID == null) return;
 
-        jdbcTemplate.update("UPDATE UsuarioTurnos SET Activo=FALSE WHERE UsuarioID=?", usuarioID);
-        
-        String sql = "INSERT INTO UsuarioTurnos (UsuarioID, TurnoID, FechaAsignacion, AdminAsignaID, Activo) VALUES (?, ?, NOW(), 1, TRUE)";
-        jdbcTemplate.update(sql, usuarioID, nuevoTurnoID);
-    }
+        // A. Obtener fecha de hoy
+        java.sql.Date fechaHoy = java.sql.Date.valueOf(java.time.LocalDate.now());
 
-    // ==========================================
-    // 3. ASIGNAR TURNO
-    // ==========================================
-    public Map<String, Object> asignarTurno(AsignarTurnoRequest req) {
-        if (req.getUsuarioID() == null || req.getTurnoID() == null) {
-            throw new RuntimeException("UsuarioID y TurnoID son obligatorios");
+        // B. Verificar si YA existe un turno hoy
+        String checkSql = "SELECT COUNT(*) FROM UsuarioTurnos WHERE UsuarioID = ? AND FechaAsignacion = ?";
+        Integer count = jdbcTemplate.queryForObject(checkSql, Integer.class, usuarioID, fechaHoy);
+
+        if (count != null && count > 0) {
+            // C. Si existe: UPDATE
+            String updateSql = "UPDATE UsuarioTurnos SET TurnoID = ?, Activo = TRUE WHERE UsuarioID = ? AND FechaAsignacion = ?";
+            jdbcTemplate.update(updateSql, nuevoTurnoID, usuarioID, fechaHoy);
+        } else {
+            // D. Si no existe: DESACTIVAR ANTERIORES e INSERTAR NUEVO
+            jdbcTemplate.update("UPDATE UsuarioTurnos SET Activo=FALSE WHERE UsuarioID=?", usuarioID);
+
+            String insertSql = """
+                INSERT INTO UsuarioTurnos (UsuarioID, TurnoID, FechaAsignacion, AdminAsignaID, Activo) 
+                VALUES (?, ?, ?, (SELECT UsuarioID FROM Usuarios WHERE RolID = 1 AND Activo = TRUE ORDER BY UsuarioID ASC LIMIT 1), TRUE)
+            """;
+            // Pasamos fechaHoy explícitamente
+            jdbcTemplate.update(insertSql, usuarioID, nuevoTurnoID, fechaHoy);
         }
-        actualizarTurnoUsuario(req.getUsuarioID(), req.getTurnoID());
-        return Map.of("mensaje", "Turno asignado correctamente", "status", "OK");
     }
 
     // ==========================================
@@ -145,17 +158,22 @@ public class AdminService {
     }
 
     // ==========================================
-    // 5. ELIMINAR USUARIO
+    // 5. ELIMINAR Y ASIGNAR
     // ==========================================
     public void eliminarUsuario(Integer usuarioID) {
         if (usuarioID == null) return;
-        
-        // ✅ SOLUCIÓN NULL SAFETY AQUÍ TAMBIÉN
         Usuario u = authRepository.findById(Objects.requireNonNull(usuarioID)).orElse(null);
-        
         if (u != null) {
             u.setActivo(false);
             authRepository.save(u);
         }
+    }
+    
+    public Map<String, Object> asignarTurno(AsignarTurnoRequest req) {
+        if (req.getUsuarioID() == null || req.getTurnoID() == null) {
+            throw new RuntimeException("Datos incompletos");
+        }
+        actualizarTurnoUsuario(req.getUsuarioID(), req.getTurnoID());
+        return Map.of("mensaje", "Turno asignado", "status", "OK");
     }
 }
