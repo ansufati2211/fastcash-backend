@@ -13,13 +13,12 @@ public class ReporteService {
     @Autowired private JdbcTemplate jdbcTemplate;
 
     // 1. REPORTE GENERAL DE VENTAS
-    // Llama al nuevo SP que ya incluye la columna "Categoría"
     public List<Map<String, Object>> obtenerReporteVentas(String inicio, String fin, Integer usuarioID) {
         if (inicio == null || inicio.isEmpty()) inicio = LocalDate.now().toString();
         if (fin == null || fin.isEmpty()) fin = LocalDate.now().toString();
         Integer uidParam = (usuarioID != null && usuarioID > 0) ? usuarioID : null;
 
-        // POSTGRES: Llamada simple a la función
+        // POSTGRES: SELECT * FROM function(...)
         String sql = "SELECT * FROM sp_reporte_detalladoventas(?, ?, ?, NULL)";
         return jdbcTemplate.queryForList(sql, Date.valueOf(inicio), Date.valueOf(fin), uidParam);
     }
@@ -29,6 +28,7 @@ public class ReporteService {
         if (inicio == null || inicio.isEmpty()) inicio = LocalDate.now().toString();
         if (fin == null || fin.isEmpty()) fin = LocalDate.now().toString();
         
+        // POSTGRES: SELECT * FROM function(...)
         return jdbcTemplate.queryForList("SELECT * FROM sp_reporte_porcaja(?, ?, ?)", Date.valueOf(inicio), Date.valueOf(fin), usuarioID);
     }
 
@@ -45,7 +45,7 @@ public class ReporteService {
             params.add(usuarioID);
         }
 
-        // A. Categorías
+        // SQL CORREGIDO: COALESCE y TO_CHAR
         String sqlCat = "SELECT COALESCE(c.Nombre, 'Sin Categoría') as label, COALESCE(SUM(vd.Monto), 0) as value " +
                         "FROM Ventas v " +
                         "LEFT JOIN VentaDetalle vd ON v.VentaID = vd.VentaID " + 
@@ -53,23 +53,13 @@ public class ReporteService {
                         "WHERE TO_CHAR(v.FechaEmision, 'YYYY-MM-DD') = TO_CHAR(?::date, 'YYYY-MM-DD') " +
                         "  AND v.Estado IN ('PAGADO', 'COMPLETADO') " + filtroUsuario + "GROUP BY c.Nombre";
         
-        // B. Métodos de Pago
         String sqlPago = "SELECT COALESCE(p.FormaPago, 'Sin Pago') as label, COALESCE(SUM(p.MontoPagado), 0) as value " +
                          "FROM Ventas v LEFT JOIN PagosRegistrados p ON v.VentaID = p.VentaID " +
                          "WHERE TO_CHAR(v.FechaEmision, 'YYYY-MM-DD') = TO_CHAR(?::date, 'YYYY-MM-DD') " +
                          "  AND v.Estado IN ('PAGADO', 'COMPLETADO') " + filtroUsuario + "GROUP BY p.FormaPago";
 
-        // C. NUEVO: Ventas por Hora
-        String sqlHoras = "SELECT EXTRACT(HOUR FROM v.FechaEmision) as label, COALESCE(SUM(v.ImporteTotal), 0) as value " +
-                          "FROM Ventas v " +
-                          "WHERE TO_CHAR(v.FechaEmision, 'YYYY-MM-DD') = TO_CHAR(?::date, 'YYYY-MM-DD') " +
-                          "  AND v.Estado IN ('PAGADO', 'COMPLETADO') " + filtroUsuario + 
-                          "GROUP BY EXTRACT(HOUR FROM v.FechaEmision) ORDER BY label";
-
         resultado.put("categorias", forzarMinusculas(jdbcTemplate.queryForList(sqlCat, params.toArray())));
         resultado.put("pagos", forzarMinusculas(jdbcTemplate.queryForList(sqlPago, params.toArray())));
-        resultado.put("horas", forzarMinusculas(jdbcTemplate.queryForList(sqlHoras, params.toArray()))); // <--- NUEVO
-        
         return resultado;
     }
     
@@ -89,6 +79,7 @@ public class ReporteService {
     // 4. OBTENER DATOS DE CIERRE ACTUAL (Arqueo)
     public Map<String, Object> obtenerCierreActual(Integer usuarioID) {
         try {
+            // POSTGRES: SELECT * FROM function(...)
             return jdbcTemplate.queryForMap("SELECT * FROM sp_operacion_obtenercierreactual(?)", usuarioID);
         } catch (Exception e) {
             Map<String, Object> vacio = new HashMap<>();
