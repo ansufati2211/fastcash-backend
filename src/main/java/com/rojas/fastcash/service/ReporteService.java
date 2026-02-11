@@ -45,6 +45,7 @@ public class ReporteService {
             params.add(usuarioID);
         }
 
+        // A. Categorías
         String sqlCat = "SELECT COALESCE(c.Nombre, 'Sin Categoría') as label, COALESCE(SUM(vd.Monto), 0) as value " +
                         "FROM Ventas v " +
                         "LEFT JOIN VentaDetalle vd ON v.VentaID = vd.VentaID " + 
@@ -52,13 +53,23 @@ public class ReporteService {
                         "WHERE TO_CHAR(v.FechaEmision, 'YYYY-MM-DD') = TO_CHAR(?::date, 'YYYY-MM-DD') " +
                         "  AND v.Estado IN ('PAGADO', 'COMPLETADO') " + filtroUsuario + "GROUP BY c.Nombre";
         
+        // B. Métodos de Pago
         String sqlPago = "SELECT COALESCE(p.FormaPago, 'Sin Pago') as label, COALESCE(SUM(p.MontoPagado), 0) as value " +
                          "FROM Ventas v LEFT JOIN PagosRegistrados p ON v.VentaID = p.VentaID " +
                          "WHERE TO_CHAR(v.FechaEmision, 'YYYY-MM-DD') = TO_CHAR(?::date, 'YYYY-MM-DD') " +
                          "  AND v.Estado IN ('PAGADO', 'COMPLETADO') " + filtroUsuario + "GROUP BY p.FormaPago";
 
+        // C. NUEVO: Ventas por Hora
+        String sqlHoras = "SELECT EXTRACT(HOUR FROM v.FechaEmision) as label, COALESCE(SUM(v.ImporteTotal), 0) as value " +
+                          "FROM Ventas v " +
+                          "WHERE TO_CHAR(v.FechaEmision, 'YYYY-MM-DD') = TO_CHAR(?::date, 'YYYY-MM-DD') " +
+                          "  AND v.Estado IN ('PAGADO', 'COMPLETADO') " + filtroUsuario + 
+                          "GROUP BY EXTRACT(HOUR FROM v.FechaEmision) ORDER BY label";
+
         resultado.put("categorias", forzarMinusculas(jdbcTemplate.queryForList(sqlCat, params.toArray())));
         resultado.put("pagos", forzarMinusculas(jdbcTemplate.queryForList(sqlPago, params.toArray())));
+        resultado.put("horas", forzarMinusculas(jdbcTemplate.queryForList(sqlHoras, params.toArray()))); // <--- NUEVO
+        
         return resultado;
     }
     
