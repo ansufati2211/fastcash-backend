@@ -1,19 +1,30 @@
 package com.rojas.fastcash.dto;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import java.util.List;
 
 @Data
 public class RegistroVentaRequest {
+    @JsonProperty("usuarioID")
     private Integer usuarioID;
+
+    @JsonProperty("tipoComprobanteID")
     private Integer tipoComprobanteID;
+
+    @JsonProperty("clienteDoc")
     private String clienteDoc;
+
+    @JsonProperty("clienteNombre")
     private String clienteNombre;
 
-    // --- NUEVO CAMPO (OPCIONAL) ---
     // Si el front no lo envía, llega como null y no pasa nada.
-    private String comprobanteExterno; 
-    // ------------------------------
+    @JsonProperty("comprobanteExterno")
+    private String comprobanteExterno;
 
+    @JsonProperty("detalles")
     private List<DetalleVentaDTO> detalles;
+
+    @JsonProperty("pagos")
     private List<PagoVentaDTO> pagos;
 }

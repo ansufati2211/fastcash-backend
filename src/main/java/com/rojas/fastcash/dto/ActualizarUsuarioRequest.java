@@ -1,17 +1,28 @@
 package com.rojas.fastcash.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
 @Data
 public class ActualizarUsuarioRequest {
-    // Usamos 'Id' (camelCase) para evitar problemas de mapeo JSON
+    @JsonProperty("usuarioId")
     private Integer usuarioId;
+
+    @JsonProperty("nombreCompleto")
     private String nombreCompleto;
+
+    @JsonProperty("username")
     private String username;
+
+    @JsonProperty("rolId")
     private Integer rolId;
+
+    @JsonProperty("password")
     private String password;
-    
-    // Campos clave para la asignación de turno y estado
-    private Integer turnoId; 
+
+    @JsonProperty("turnoId")
+    private Integer turnoId;
+
+    @JsonProperty("activo")
     private Boolean activo;
 }

@@ -1,24 +1,39 @@
 package com.rojas.fastcash.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
 public class ResumenCierreDTO {
-    // Datos de Estado
+    @JsonProperty("estado")
     private String estado;
-    private LocalDateTime fechaApertura;
-    private String turnoNombre;         // <--- NUEVO: Retornado por el SP de Postgres
 
-    // Desglose de Dinero
+    @JsonProperty("fechaApertura")
+    private LocalDateTime fechaApertura;
+
+    @JsonProperty("turnoNombre")
+    private String turnoNombre;
+
+    @JsonProperty("saldoInicial")
     private BigDecimal saldoInicial;
+
+    @JsonProperty("ventasEfectivo")
     private BigDecimal ventasEfectivo;
+
+    @JsonProperty("ventasDigital")
     private BigDecimal ventasDigital;
-    private BigDecimal ventasTarjeta;   // <--- FALTABA: El SP devuelve esto
-    
-    // Totales
+
+    @JsonProperty("ventasTarjeta")
+    private BigDecimal ventasTarjeta;
+
+    @JsonProperty("totalVendido")
     private BigDecimal totalVendido;
-    private BigDecimal saldoEsperadoEnCaja; 
-    private BigDecimal totalAnulado;    // <--- NUEVO: Útil para auditoría
+
+    @JsonProperty("saldoEsperadoEnCaja")
+    private BigDecimal saldoEsperadoEnCaja;
+
+    @JsonProperty("totalAnulado")
+    private BigDecimal totalAnulado;
 }

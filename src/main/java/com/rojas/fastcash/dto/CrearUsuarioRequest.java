@@ -1,26 +1,31 @@
 package com.rojas.fastcash.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 @Data
 public class CrearUsuarioRequest {
-    
-    private Integer adminId; // Opcional, si no se usa se puede quitar
+    @JsonProperty("adminId")
+    private Integer adminId;
 
     @NotBlank(message = "El nombre completo es obligatorio")
+    @JsonProperty("nombreCompleto")
     private String nombreCompleto;
 
     @NotBlank(message = "El username es obligatorio")
+    @JsonProperty("username")
     private String username;
 
     @NotBlank(message = "La contraseña es obligatoria")
+    @JsonProperty("password")
     private String password;
 
-    @NotNull(message = "El Rol ID es obligatorio (1=Admin, 2=Cajero)")
+    @NotNull(message = "El Rol ID es obligatorio")
+    @JsonProperty("rolId")
     private Integer rolId;
 
-    // ✅ NUEVO: Para asignar turno desde la creación
-    private Integer turnoId; 
+    @JsonProperty("turnoId")
+    private Integer turnoId;
 }

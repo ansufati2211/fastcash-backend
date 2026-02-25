@@ -1,9 +1,13 @@
 package com.rojas.fastcash.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
 @Data
 public class CategoriaRequest {
+    @JsonProperty("nombre")
     private String nombre;
-    private Boolean activo; // Para poder activar/desactivar
+
+    @JsonProperty("activo")
+    private Boolean activo;
 }

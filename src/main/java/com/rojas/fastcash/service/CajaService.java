@@ -4,6 +4,7 @@ import com.rojas.fastcash.dto.AperturaCajaRequest;
 import com.rojas.fastcash.dto.CierreCajaRequest;
 import com.rojas.fastcash.entity.SesionCaja;
 import com.rojas.fastcash.repository.SesionCajaRepository;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
@@ -17,6 +18,7 @@ import java.math.BigDecimal;
 import java.util.Map;
 import java.util.Optional;
 
+@Slf4j // Anotación para manejo profesional de Logs
 @Service
 public class CajaService {
 
@@ -33,11 +35,10 @@ public class CajaService {
         if (sesionActual.isPresent()) {
             throw new RuntimeException("⚠️ Ya tienes una caja ABIERTA. Debes cerrar la actual antes de abrir una nueva.");
         }
-        
-        // Usamos SELECT para llamar a la función en Postgres
+
         String sql = "SELECT sp_caja_abrir(?, ?)";
         BigDecimal saldo = request.getSaldoInicial() != null ? request.getSaldoInicial() : BigDecimal.ZERO;
-        
+
         try {
             jdbcTemplate.execute(sql, (PreparedStatement ps) -> {
                 ps.setInt(1, request.getUsuarioID());
@@ -45,6 +46,7 @@ public class CajaService {
                 return ps.execute();
             });
         } catch (Exception e) {
+            log.error("❌ Error al abrir caja: {}", e.getMessage(), e);
             String msg = e.getCause() != null ? e.getCause().getMessage() : e.getMessage();
             throw new RuntimeException("Error al abrir caja: " + msg);
         }
@@ -56,21 +58,13 @@ public class CajaService {
             throw new RuntimeException("⚠️ No tienes una caja abierta para cerrar.");
         }
 
-        // =========================================================================
-        // CORRECCIÓN CRÍTICA PARA POSTGRESQL
-        // Usamos casting explícito (?::integer, ?::numeric) en la cadena SQL.
-        // Esto elimina la ambigüedad y evita el error "Bad SQL Grammar".
-        // =========================================================================
         String sql = "SELECT * FROM sp_caja_cerrar(?::integer, ?::numeric)";
-        
         BigDecimal saldoFinal = request.getSaldoFinalReal() != null ? request.getSaldoFinalReal() : BigDecimal.ZERO;
 
         try {
             return jdbcTemplate.queryForMap(sql, request.getUsuarioID(), saldoFinal);
         } catch (Exception e) {
-            // Imprimimos el error en consola para depuración
-            System.err.println("❌ Error Cierre Caja: " + e.getMessage());
-            e.printStackTrace();
+            log.error("❌ Error Cierre Caja para usuario {}: {}", request.getUsuarioID(), e.getMessage(), e);
             throw new RuntimeException("Error al cerrar caja: " + e.getMessage());
         }
     }
@@ -79,26 +73,22 @@ public class CajaService {
     // LÓGICA DE CIERRE AUTOMÁTICO
     // =========================================================================
 
-    // 1. EJECUCIÓN PROGRAMADA: Medianoche (00:00 AM)
-    @Scheduled(cron = "0 0 0 * * ?", zone = "America/Lima") 
+    @Scheduled(cron = "0 0 0 * * ?", zone = "America/Lima")
     public void cierreProgramadoMedianoche() {
         ejecutarLimpiezaCajas("Medianoche");
     }
 
-    // 2. EJECUCIÓN AL INICIO: Por si el servidor estaba apagado en la noche
     @EventListener(ApplicationReadyEvent.class)
     public void cierreAlIniciarSistema() {
         ejecutarLimpiezaCajas("InicioSistema");
     }
 
-    // Método privado reutilizable
     private void ejecutarLimpiezaCajas(String origen) {
         try {
-            // En Postgres usamos SELECT * FROM funcion() para ejecutarla
             jdbcTemplate.execute("SELECT * FROM sp_caja_cierreautomatico()");
-            System.out.println("✅ [AUTO-CIERRE] Limpieza completada (Origen: " + origen + ").");
+            log.info("✅ [AUTO-CIERRE] Limpieza completada (Origen: {}).", origen);
         } catch (Exception e) {
-            System.err.println("❌ [AUTO-CIERRE] Error ejecutando limpieza: " + e.getMessage());
+            log.error("❌ [AUTO-CIERRE] Error ejecutando limpieza (Origen: {}): {}", origen, e.getMessage(), e);
         }
     }
 }
