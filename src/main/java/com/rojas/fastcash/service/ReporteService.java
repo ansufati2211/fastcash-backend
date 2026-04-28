@@ -18,7 +18,6 @@ public class ReporteService {
         if (fin == null || fin.isEmpty()) fin = LocalDate.now().toString();
         Integer uidParam = (usuarioID != null && usuarioID > 0) ? usuarioID : null;
 
-        // POSTGRES: SELECT * FROM function(...)
         String sql = "SELECT * FROM sp_reporte_detalladoventas(?, ?, ?, NULL)";
         return jdbcTemplate.queryForList(sql, Date.valueOf(inicio), Date.valueOf(fin), uidParam);
     }
@@ -28,11 +27,10 @@ public class ReporteService {
         if (inicio == null || inicio.isEmpty()) inicio = LocalDate.now().toString();
         if (fin == null || fin.isEmpty()) fin = LocalDate.now().toString();
 
-        // POSTGRES: SELECT * FROM function(...)
         return jdbcTemplate.queryForList("SELECT * FROM sp_reporte_porcaja(?, ?, ?)", Date.valueOf(inicio), Date.valueOf(fin), usuarioID);
     }
 
-    // 3. DASHBOARD DE GRÁFICOS (Compatible Postgres)
+    // 3. DASHBOARD DE GRÁFICOS
     public Map<String, Object> obtenerDatosGraficos(String fechaStr, Integer usuarioID) {
         String fechaFinal = (fechaStr == null || fechaStr.isEmpty()) ? LocalDate.now().toString() : fechaStr;
         Map<String, Object> resultado = new HashMap<>();
@@ -45,7 +43,6 @@ public class ReporteService {
             params.add(usuarioID);
         }
 
-        // SQL CORREGIDO: COALESCE y TO_CHAR
         String sqlCat = "SELECT COALESCE(c.Nombre, 'Sin Categoría') as label, COALESCE(SUM(vd.Monto), 0) as value " +
                         "FROM Ventas v " +
                         "LEFT JOIN VentaDetalle vd ON v.VentaID = vd.VentaID " +
@@ -76,10 +73,8 @@ public class ReporteService {
         return listaLimpia;
     }
 
-    // 4. OBTENER DATOS DE CIERRE ACTUAL (Arqueo)
     public Map<String, Object> obtenerCierreActual(Integer usuarioID) {
         try {
-            // POSTGRES: SELECT * FROM function(...)
             return jdbcTemplate.queryForMap("SELECT * FROM sp_operacion_obtenercierreactual(?)", usuarioID);
         } catch (Exception e) {
             Map<String, Object> vacio = new HashMap<>();
@@ -89,7 +84,7 @@ public class ReporteService {
         }
     }
 
-// 5. OBTENER DETALLE DE TRANSACCIONES DEL CIERRE ACTUAL (OPTIMIZADO CON ENTIDAD Y LOTE)
+    // 5. OBTENER DETALLE DE TRANSACCIONES DEL CIERRE ACTUAL
     public List<Map<String, Object>> obtenerDetalleCierreActual(Integer usuarioID) {
         String sql = "SELECT v.fechaemision, p.formapago, " +
                      "COALESCE(e.nombre, '-') AS entidadbancaria, " +
@@ -99,6 +94,7 @@ public class ReporteService {
                      "    WHEN p.ultimos4digitos IS NOT NULL AND p.ultimos4digitos <> '' THEN '***' || p.ultimos4digitos " +
                      "    ELSE '-' " +
                      "END AS numerooperacion, " +
+                     "COALESCE(p.nombretitular, '-') AS titular, " +
                      "p.montopagado " +
                      "FROM ventas v " +
                      "JOIN pagosregistrados p ON v.ventaid = p.ventaid " +

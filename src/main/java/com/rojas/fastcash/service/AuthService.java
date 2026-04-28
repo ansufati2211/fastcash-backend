@@ -50,6 +50,8 @@ public class AuthService {
         
         respuesta.put("Mensaje", "Login Exitoso");
 
+        respuesta.put("Token", "token-temporal-hasta-implementar-jwt");
+        
         return respuesta;
     }
 }

@@ -17,4 +17,7 @@ public class PagoVentaDTO {
 
     @JsonProperty("NumOperacion")
     private String numOperacion;
+
+    @JsonProperty("NombreTitular")
+    private String nombreTitular;
 }
