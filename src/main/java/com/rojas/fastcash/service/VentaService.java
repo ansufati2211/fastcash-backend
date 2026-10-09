@@ -5,8 +5,8 @@ import com.rojas.fastcash.dto.AnulacionRequest;
 import com.rojas.fastcash.dto.PagoVentaDTO;
 import com.rojas.fastcash.dto.RegistroVentaRequest;
 import com.rojas.fastcash.entity.SesionCaja;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,11 +16,12 @@ import java.util.Map;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor 
 public class VentaService {
 
-    @Autowired private JdbcTemplate jdbcTemplate;
-    @Autowired private CajaService cajaService;
-    @Autowired private ObjectMapper objectMapper;
+    private final JdbcTemplate jdbcTemplate;
+    private final CajaService cajaService;
+    private final ObjectMapper objectMapper;
 
     @Transactional
     public Map<String, Object> registrarVenta(RegistroVentaRequest request) {
@@ -31,14 +32,12 @@ public class VentaService {
 
         if (request.getPagos() != null) {
             for (PagoVentaDTO pago : request.getPagos()) {
-                // Validar N° de Operación para todo lo que no sea efectivo
                 if (!"EFECTIVO".equals(pago.getFormaPago())) {
                     if (pago.getNumOperacion() == null || pago.getNumOperacion().trim().isEmpty()) {
                         throw new RuntimeException("ERROR: Ingrese N° Operación para " + pago.getFormaPago());
                     }
                 }
 
-                // NUEVO: Exigir el nombre del titular SOLO para transferencias
                 if ("TRANSFERENCIA".equals(pago.getFormaPago())) {
                     if (pago.getNombreTitular() == null || pago.getNombreTitular().trim().isEmpty()) {
                         throw new RuntimeException("ERROR: Ingrese el Nombre del Titular para la Transferencia");
@@ -76,11 +75,10 @@ public class VentaService {
         }
     }
 
-    public List<Map<String, Object>> listarHistorialDia(Integer usuarioID, Integer filtroUsuarioID) {
-        String sql = "SELECT * FROM sp_historialventas_filtrado(?, ?)";
-        return jdbcTemplate.queryForList(sql, usuarioID, filtroUsuarioID);
+public List<Map<String, Object>> listarHistorialDia(Integer usuarioID, Integer filtroUsuarioID, String medioPago) {
+        String sql = "SELECT * FROM sp_historialventas_filtrado(?::int, ?::int, ?::varchar)";
+        return jdbcTemplate.queryForList(sql, usuarioID, filtroUsuarioID, medioPago);
     }
-
     @Transactional
     public Map<String, Object> anularVenta(AnulacionRequest request) {
         try {
